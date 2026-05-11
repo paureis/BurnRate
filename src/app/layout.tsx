@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/og-v2.png",
+        url: "/og-v3.png",
         width: 1200,
         height: 630,
         alt: "BurnRate — Subscription Tracker",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     title: "BurnRate |See What Your Subscriptions Really Cost",
     description:
       "Free subscription tracker. See your real burn rate, track trials, simulate cancellations.",
-    images: ["/og-v2.png"],
+    images: ["/og-v3.png"],
   },
   icons: {
     icon: "/icon.svg",

@@ -86,12 +86,15 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   <text x="1110" y="592" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="rgba(255,255,255,0.45)" text-anchor="end" letter-spacing="3">BURNRATE-BAY.VERCEL.APP</text>
 </svg>`;
 
-const outPath = resolve("public", "og-v2.png");
+const outPath = resolve("public", "og-v3.png");
 const svgBuffer = Buffer.from(svg);
 
-const pngBuffer = await sharp(svgBuffer, { density: 144 })
-  .resize(1200, 630, { fit: "fill" })
-  .png({ compressionLevel: 9 })
+// Render SVG at 4x density (4800x2520), then downsample to 1200x630 with lanczos3.
+// LinkedIn's preview pipeline re-encodes OG images aggressively; supersampling
+// our source means even after their downsample/JPEG step the text stays crisp.
+const pngBuffer = await sharp(svgBuffer, { density: 288 })
+  .resize(1200, 630, { fit: "fill", kernel: "lanczos3" })
+  .png({ compressionLevel: 9, adaptiveFiltering: true })
   .toBuffer();
 
 await writeFile(outPath, pngBuffer);
