@@ -34,11 +34,12 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   <rect width="1200" height="630" fill="url(#glow1)"/>
   <rect width="1200" height="630" fill="url(#glow2)"/>
 
-  <!-- Flame icon (BurnRate brand — official Lucide flame path, scaled into the 120x120 tile) -->
+  <!-- Flame icon (BurnRate brand — exact mirror of src/app/icon.svg favicon) -->
   <g transform="translate(90, 86)" filter="url(#flameGlow)">
-    <rect width="120" height="120" rx="22" fill="#ff5a3d"/>
-    <g transform="translate(20, 20) scale(3.333)">
-      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" fill="#140b08" fill-rule="evenodd" stroke="#140b08" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect width="120" height="120" rx="22" fill="#0f1115"/>
+    <g transform="scale(1.875)">
+      <path d="M33 8c2 10 11 14 14 23 4 13-6 25-20 25S8 47 11 35c2-8 8-10 9-17 6 6 8 10 7 17 7-5 2-15 6-27Z" fill="#ff5a3d"/>
+      <path d="M32 39c4 4 5 9 0 14-5-2-8-6-7-11 1-4 5-6 7-12 3 4 5 6 0 9Z" fill="#ffd166"/>
     </g>
   </g>
 
