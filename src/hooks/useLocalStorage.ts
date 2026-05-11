@@ -2,34 +2,37 @@
 
 import { useEffect, useRef, useState } from "react";
 
+function readStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+  try {
+    const stored = window.localStorage.getItem(key);
+    return stored ? (JSON.parse(stored) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function useLocalStorage<T>(
   key: string,
   initialValue: T,
-): [T, React.Dispatch<React.SetStateAction<T>>, boolean] {
-  const initialRef = useRef(initialValue);
-  const [value, setValue] = useState<T>(initialValue);
-  const [hydrated, setHydrated] = useState(false);
+): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => readStorage(key, initialValue));
+
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(key);
-      if (stored) {
-        setValue(JSON.parse(stored) as T);
-      }
-    } catch {
-      setValue(initialRef.current);
-    } finally {
-      setHydrated(true);
-    }
-  }, [key]);
-
-  useEffect(() => {
-    if (!hydrated) {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
       return;
     }
+    try {
+      window.localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Storage full or unavailable — silently fail
+    }
+  }, [key, value]);
 
-    window.localStorage.setItem(key, JSON.stringify(value));
-  }, [hydrated, key, value]);
-
-  return [value, setValue, hydrated];
+  return [value, setValue];
 }
