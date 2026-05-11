@@ -1,4 +1,4 @@
-// Generates public/og-v3.png by rendering an HTML page in headless Chromium.
+// Generates public/og-v4.png by rendering an HTML page in headless Chromium.
 // Browser-quality text rendering (subpixel AA, real Bebas Neue + Manrope from
 // Google Fonts) — the previous sharp+librsvg pipeline produced soft text
 // because librsvg falls back to generic fonts when fontconfig can't resolve
@@ -169,7 +169,7 @@ const html = `<!DOCTYPE html>
 </body>
 </html>`;
 
-const outPath = resolve("public", "og-v3.png");
+const outPath = resolve("public", "og-v4.png");
 
 const browser = await puppeteer.launch({
   args: ["--no-sandbox", "--disable-setuid-sandbox"],
