@@ -17,12 +17,12 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "BurnRate — See What Your Subscriptions Really Cost",
+  title: "BurnRate | See What Your Subscriptions Really Cost",
   description:
     "A free subscription tracker that shows your real monthly and yearly burn rate, tracks free trials before they auto-charge, and helps you find savings. No account needed — runs entirely in your browser.",
   metadataBase: new URL("https://burnrate-bay.vercel.app"),
   openGraph: {
-    title: "BurnRate — See What Your Subscriptions Really Cost",
+    title: "BurnRate | See What Your Subscriptions Really Cost",
     description:
       "Track every subscription, spot free trials before they charge, and simulate cancellations to find savings. 100% free, no sign-up, runs in your browser.",
     url: "https://burnrate-bay.vercel.app",
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "BurnRate — See What Your Subscriptions Really Cost",
+    title: "BurnRate |See What Your Subscriptions Really Cost",
     description:
       "Free subscription tracker. See your real burn rate, track trials, simulate cancellations.",
     images: ["/og-image.png"],
