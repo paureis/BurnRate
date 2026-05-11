@@ -1,101 +1,189 @@
+// Generates public/og-v3.png by rendering an HTML page in headless Chromium.
+// Browser-quality text rendering (subpixel AA, real Bebas Neue + Manrope from
+// Google Fonts) — the previous sharp+librsvg pipeline produced soft text
+// because librsvg falls back to generic fonts when fontconfig can't resolve
+// "Impact" and "Helvetica Neue" by name.
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import sharp from "sharp";
+import puppeteer from "puppeteer";
 
-const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0f1115"/>
-      <stop offset="100%" stop-color="#171a21"/>
-    </linearGradient>
-    <radialGradient id="glow1" cx="0.15" cy="0.25" r="0.55">
-      <stop offset="0%" stop-color="#ff5a3d" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#ff5a3d" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="glow2" cx="0.85" cy="0.9" r="0.55">
-      <stop offset="0%" stop-color="#37f29b" stop-opacity="0.22"/>
-      <stop offset="100%" stop-color="#37f29b" stop-opacity="0"/>
-    </radialGradient>
-    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
-      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#ffffff" stroke-opacity="0.04" stroke-width="1"/>
-    </pattern>
-    <filter id="flameGlow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="14" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
+const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    width: 1200px;
+    height: 630px;
+    color: #f6f1e8;
+    font-family: "Manrope", system-ui, sans-serif;
+    background:
+      radial-gradient(circle at 15% 25%, rgba(255, 90, 61, 0.35), transparent 55%),
+      radial-gradient(circle at 85% 90%, rgba(55, 242, 155, 0.22), transparent 55%),
+      linear-gradient(135deg, #0f1115 0%, #171a21 100%);
+    position: relative;
+    overflow: hidden;
+  }
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+  }
+  .header { position: absolute; top: 86px; left: 90px; display: flex; align-items: center; gap: 28px; }
+  .logo-tile {
+    width: 120px;
+    height: 120px;
+    border-radius: 22px;
+    background: #0f1115;
+    box-shadow: 0 0 60px rgba(255, 90, 61, 0.45);
+    display: grid;
+    place-items: center;
+  }
+  .logo-tile svg { width: 86px; height: 86px; }
+  .brand h1 {
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 96px;
+    line-height: 1;
+    letter-spacing: 2px;
+    color: #f6f1e8;
+    margin-bottom: 14px;
+  }
+  .pill {
+    display: inline-block;
+    padding: 8px 22px;
+    border-radius: 999px;
+    background: rgba(255, 209, 102, 0.14);
+    border: 2px solid #ffd166;
+    color: #ffd166;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 3px;
+  }
+  .tagline {
+    position: absolute;
+    left: 90px;
+    top: 286px;
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 78px;
+    line-height: 0.98;
+    letter-spacing: 1px;
+  }
+  .tagline div { margin-bottom: 6px; }
+  .tagline .accent { color: #ff5a3d; }
+  .stat-card {
+    position: absolute;
+    right: 80px;
+    top: 280px;
+    width: 380px;
+    background: rgba(31, 36, 45, 0.85);
+    border: 2px solid rgba(255, 255, 255, 0.10);
+    border-radius: 18px;
+    padding: 28px;
+  }
+  .stat-card .label {
+    font-size: 14px;
+    font-weight: 800;
+    color: #ff5a3d;
+    letter-spacing: 3px;
+    margin-bottom: 8px;
+  }
+  .stat-card .value {
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 96px;
+    line-height: 1;
+    color: #f6f1e8;
+    margin-bottom: 18px;
+  }
+  .stat-card hr {
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    margin-bottom: 14px;
+  }
+  .stat-card .desc {
+    font-size: 14px;
+    font-weight: 700;
+    color: #a9b0bc;
+    line-height: 1.35;
+  }
+  .footer { position: absolute; left: 90px; bottom: 60px; display: flex; gap: 28px; align-items: center; }
+  .cat { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 800; color: #a9b0bc; letter-spacing: 2px; }
+  .dot { width: 14px; height: 14px; border-radius: 999px; }
+  .watermark {
+    position: absolute;
+    right: 80px;
+    bottom: 60px;
+    font-size: 14px;
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.45);
+    letter-spacing: 3px;
+  }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
 
-  <rect width="1200" height="630" fill="url(#bg)"/>
-  <rect width="1200" height="630" fill="url(#grid)"/>
-  <rect width="1200" height="630" fill="url(#glow1)"/>
-  <rect width="1200" height="630" fill="url(#glow2)"/>
+  <div class="header">
+    <div class="logo-tile">
+      <!-- BurnRate flame from src/app/icon.svg, scaled into the 120x120 tile -->
+      <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <path d="M33 8c2 10 11 14 14 23 4 13-6 25-20 25S8 47 11 35c2-8 8-10 9-17 6 6 8 10 7 17 7-5 2-15 6-27Z" fill="#ff5a3d"/>
+        <path d="M32 39c4 4 5 9 0 14-5-2-8-6-7-11 1-4 5-6 7-12 3 4 5 6 0 9Z" fill="#ffd166"/>
+      </svg>
+    </div>
+    <div class="brand">
+      <h1>BURNRATE</h1>
+      <span class="pill">FREE · NO SIGN-UP · IN BROWSER</span>
+    </div>
+  </div>
 
-  <!-- Flame icon (BurnRate brand — exact mirror of src/app/icon.svg favicon) -->
-  <g transform="translate(90, 86)" filter="url(#flameGlow)">
-    <rect width="120" height="120" rx="22" fill="#0f1115"/>
-    <g transform="scale(1.875)">
-      <path d="M33 8c2 10 11 14 14 23 4 13-6 25-20 25S8 47 11 35c2-8 8-10 9-17 6 6 8 10 7 17 7-5 2-15 6-27Z" fill="#ff5a3d"/>
-      <path d="M32 39c4 4 5 9 0 14-5-2-8-6-7-11 1-4 5-6 7-12 3 4 5 6 0 9Z" fill="#ffd166"/>
-    </g>
-  </g>
+  <div class="tagline">
+    <div>See what your</div>
+    <div class="accent">subscriptions</div>
+    <div>really cost.</div>
+  </div>
 
-  <!-- BURNRATE word -->
-  <text x="240" y="172" font-family="Impact, 'Arial Black', sans-serif" font-size="96" font-weight="900" fill="#f6f1e8" letter-spacing="2">BURNRATE</text>
+  <div class="stat-card">
+    <div class="label">MONTHLY BURN</div>
+    <div class="value">$184</div>
+    <hr />
+    <div class="desc">Track every charge. Spot trials before they auto-bill. Simulate cancellations.</div>
+  </div>
 
-  <!-- Pill: free no signup -->
-  <g transform="translate(240, 200)">
-    <rect width="380" height="40" rx="20" fill="rgba(255,209,102,0.14)" stroke="#ffd166" stroke-width="2"/>
-    <text x="190" y="27" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="#ffd166" text-anchor="middle" letter-spacing="3">FREE · NO SIGN-UP · IN BROWSER</text>
-  </g>
+  <div class="footer">
+    <span class="cat"><span class="dot" style="background:#ff5a3d"></span>ENTERTAINMENT</span>
+    <span class="cat"><span class="dot" style="background:#ffd166"></span>PRODUCTIVITY</span>
+    <span class="cat"><span class="dot" style="background:#37f29b"></span>MUSIC</span>
+    <span class="cat"><span class="dot" style="background:#ff435f"></span>CLOUD</span>
+  </div>
 
-  <!-- Tagline -->
-  <text x="90" y="346" font-family="Impact, 'Arial Black', sans-serif" font-size="78" font-weight="900" fill="#f6f1e8" letter-spacing="1">See what your</text>
-  <text x="90" y="424" font-family="Impact, 'Arial Black', sans-serif" font-size="78" font-weight="900" fill="#ff5a3d" letter-spacing="1">subscriptions</text>
-  <text x="90" y="502" font-family="Impact, 'Arial Black', sans-serif" font-size="78" font-weight="900" fill="#f6f1e8" letter-spacing="1">really cost.</text>
-
-  <!-- Right-side stat block -->
-  <g transform="translate(740, 280)">
-    <rect width="380" height="220" rx="18" fill="rgba(31,36,45,0.85)" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
-    <text x="28" y="50" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="#ff5a3d" letter-spacing="3">MONTHLY BURN</text>
-    <text x="28" y="140" font-family="Impact, 'Arial Black', sans-serif" font-size="96" font-weight="900" fill="#f6f1e8" letter-spacing="0">$184</text>
-    <line x1="28" y1="160" x2="352" y2="160" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
-    <text x="28" y="185" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="700" fill="#a9b0bc">Track every charge. Spot trials before</text>
-    <text x="28" y="203" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="700" fill="#a9b0bc">they auto-bill. Simulate cancellations.</text>
-  </g>
-
-  <!-- Bottom row: dots/categories -->
-  <g transform="translate(90, 552)">
-    <circle cx="8" cy="8" r="8" fill="#ff5a3d"/>
-    <text x="28" y="14" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="#a9b0bc" letter-spacing="2">ENTERTAINMENT</text>
-
-    <circle cx="208" cy="8" r="8" fill="#ffd166"/>
-    <text x="228" y="14" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="#a9b0bc" letter-spacing="2">PRODUCTIVITY</text>
-
-    <circle cx="408" cy="8" r="8" fill="#37f29b"/>
-    <text x="428" y="14" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="#a9b0bc" letter-spacing="2">MUSIC</text>
-
-    <circle cx="528" cy="8" r="8" fill="#ff435f"/>
-    <text x="548" y="14" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="#a9b0bc" letter-spacing="2">CLOUD</text>
-  </g>
-
-  <!-- watermark/url -->
-  <text x="1110" y="592" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="rgba(255,255,255,0.45)" text-anchor="end" letter-spacing="3">BURNRATE-BAY.VERCEL.APP</text>
-</svg>`;
+  <div class="watermark">BURNRATE-BAY.VERCEL.APP</div>
+</body>
+</html>`;
 
 const outPath = resolve("public", "og-v3.png");
-const svgBuffer = Buffer.from(svg);
 
-// Render SVG at 4x density (4800x2520), then downsample to 1200x630 with lanczos3.
-// LinkedIn's preview pipeline re-encodes OG images aggressively; supersampling
-// our source means even after their downsample/JPEG step the text stays crisp.
-const pngBuffer = await sharp(svgBuffer, { density: 288 })
-  .resize(1200, 630, { fit: "fill", kernel: "lanczos3" })
-  .png({ compressionLevel: 9, adaptiveFiltering: true })
-  .toBuffer();
+const browser = await puppeteer.launch({
+  args: ["--no-sandbox", "--disable-setuid-sandbox"],
+});
 
-await writeFile(outPath, pngBuffer);
-console.log(`Wrote ${outPath} (${pngBuffer.length.toLocaleString()} bytes)`);
+try {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1200, height: 630, deviceScaleFactor: 1 });
+  await page.setContent(html, { waitUntil: "networkidle0" });
+  // Wait for Google Fonts to finish loading so the screenshot uses Bebas Neue + Manrope, not fallbacks.
+  await page.evaluate(() => document.fonts.ready);
+  const buffer = await page.screenshot({ type: "png", omitBackground: false });
+  await writeFile(outPath, buffer);
+  console.log(`Wrote ${outPath} (${buffer.length.toLocaleString()} bytes)`);
+} finally {
+  await browser.close();
+}
