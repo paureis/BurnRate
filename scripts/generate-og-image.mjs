@@ -34,11 +34,12 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   <rect width="1200" height="630" fill="url(#glow1)"/>
   <rect width="1200" height="630" fill="url(#glow2)"/>
 
-  <!-- Flame icon (BurnRate brand) -->
+  <!-- Flame icon (BurnRate brand — official Lucide flame path, scaled into the 120x120 tile) -->
   <g transform="translate(90, 86)" filter="url(#flameGlow)">
     <rect width="120" height="120" rx="22" fill="#ff5a3d"/>
-    <path d="M 78 28 c 4 18 22 26 27 44 c 6 24 -12 48 -38 48 s -32 -16 -27 -34 c 4 -14 16 -19 17 -32 c 12 12 16 19 14 32 c 13 -10 4 -28 12 -52 z" fill="#140b08"/>
-    <path d="M 70 76 c 8 8 10 18 0 28 c -10 -4 -16 -12 -14 -22 c 2 -8 10 -12 14 -22 c 6 8 10 12 0 16 z" fill="#ffd166"/>
+    <g transform="translate(20, 20) scale(3.333)">
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" fill="#140b08" fill-rule="evenodd" stroke="#140b08" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
   </g>
 
   <!-- BURNRATE word -->
@@ -81,7 +82,7 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   </g>
 
   <!-- watermark/url -->
-  <text x="1110" y="592" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="rgba(255,255,255,0.45)" text-anchor="end" letter-spacing="3">BURNRATE.VERCEL.APP</text>
+  <text x="1110" y="592" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="rgba(255,255,255,0.45)" text-anchor="end" letter-spacing="3">BURNRATE-BAY.VERCEL.APP</text>
 </svg>`;
 
 const outPath = resolve("public", "og-image.png");
