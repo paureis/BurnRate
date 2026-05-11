@@ -86,7 +86,7 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   <text x="1110" y="592" font-family="'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="800" fill="rgba(255,255,255,0.45)" text-anchor="end" letter-spacing="3">BURNRATE-BAY.VERCEL.APP</text>
 </svg>`;
 
-const outPath = resolve("public", "og-image.png");
+const outPath = resolve("public", "og-v2.png");
 const svgBuffer = Buffer.from(svg);
 
 const pngBuffer = await sharp(svgBuffer, { density: 144 })
