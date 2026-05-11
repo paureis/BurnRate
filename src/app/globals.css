@@ -1,0 +1,234 @@
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Bebas Neue";
+  --font-body: "Manrope";
+  --background: #0f1115;
+  --background-grid: rgba(255, 255, 255, 0.035);
+  --panel: #171a21;
+  --panel-strong: #1f242d;
+  --panel-soft: #242832;
+  --text: #f6f1e8;
+  --muted: #a9b0bc;
+  --subtle: #6f7785;
+  --line: rgba(255, 255, 255, 0.12);
+  --accent: #ff5a3d;
+  --accent-2: #ffd166;
+  --accent-3: #37f29b;
+  --danger: #ff435f;
+  --shadow: rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--background);
+  color: var(--text);
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  font-family: var(--font-body), sans-serif;
+  background:
+    linear-gradient(135deg, rgba(255, 90, 61, 0.12), transparent 30%),
+    linear-gradient(315deg, rgba(55, 242, 155, 0.08), transparent 28%),
+    radial-gradient(circle at center, transparent 0, transparent 24px, rgba(255, 255, 255, 0.025) 25px),
+    var(--background);
+  background-size: auto, auto, 48px 48px, auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+::selection {
+  background: var(--accent);
+  color: #0f1115;
+}
+
+.theme-light {
+  --background: #f5efe5;
+  --background-grid: rgba(15, 17, 21, 0.055);
+  --panel: #fffaf0;
+  --panel-strong: #f1e4d1;
+  --panel-soft: #f8eddc;
+  --text: #16130f;
+  --muted: #5b6470;
+  --subtle: #7a6f64;
+  --line: rgba(20, 18, 16, 0.16);
+  --accent: #d94123;
+  --accent-2: #bf6d00;
+  --accent-3: #087f5b;
+  --danger: #c9184a;
+  --shadow: rgba(77, 44, 10, 0.18);
+}
+
+.app-shell {
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    linear-gradient(var(--background-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--background-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -3rem;
+  z-index: 1000;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.75rem 1rem;
+  transition: top 160ms ease;
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  box-shadow: 0 18px 60px var(--shadow);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-strong);
+  color: var(--text);
+  padding: 0.75rem 0.85rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.input:focus,
+.input:focus-visible {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 24%, transparent);
+}
+
+.label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.button-primary,
+.button-secondary,
+.button-ghost,
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 6px;
+  font-weight: 800;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.button-primary {
+  border: 1px solid color-mix(in srgb, var(--accent) 80%, white);
+  background: var(--accent);
+  color: #140b08;
+  padding: 0.75rem 1rem;
+}
+
+.button-secondary {
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--text);
+  padding: 0.75rem 1rem;
+}
+
+.button-ghost {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.65rem 0.75rem;
+}
+
+.icon-button {
+  width: 2.55rem;
+  height: 2.55rem;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.button-primary:hover,
+.button-secondary:hover,
+.button-ghost:hover,
+.icon-button:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-2);
+}
+
+.button-primary:focus-visible,
+.button-secondary:focus-visible,
+.button-ghost:focus-visible,
+.icon-button:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 3px;
+}
+
+.stat-number {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: 0;
+  line-height: 0.88;
+}
+
+.pulse-urgent {
+  animation: urgentPulse 1.25s ease-in-out infinite;
+}
+
+@keyframes urgentPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 32%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--danger) 0%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

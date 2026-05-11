@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+*.log
+*.err
+*.tsbuildinfo
+playwright-report/
+test-results/
+.playwright-mcp/
+burnrate-mobile.png
