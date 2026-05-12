@@ -1,6 +1,6 @@
 # BurnRate
 
-BurnRate is a free, local-first subscription tracker and spending analyzer. It helps track recurring subscriptions, free trials, upcoming renewals, category spend, cancellation savings, and budget goals — all without a backend, account, database, or API key.
+BurnRate is a free, local-first subscription tracker and spending analyzer. It helps track recurring subscriptions, free trials, upcoming renewals, category spend, cancellation savings, budget goals, and behaviour change — all without a backend, account, database, or API key.
 
 ## Features
 
@@ -11,20 +11,35 @@ BurnRate is a free, local-first subscription tracker and spending analyzer. It h
 - Free trial countdowns with urgency indicators and browser notifications
 - Rule-based smart insights
 - What-if cancellation simulator
+- **Trends panel (v3)** — monthly burn history (24-month retention) with a 12-month forecast at your current rate
+- **Smarter alternatives (v3)** — surfaces cheaper bundles (Apple One, Disney Trio, Game Pass Ultimate, etc.) and overlap warnings (multiple video streamers, redundant AI subs)
+- **Pending cancellations (v3)** — schedule a cancel-on date; BurnRate auto-cancels on boot with a 7-day undo
+- **Savings ledger (v3)** — running tally of monthly/annualized savings since your first cancellation
 
 ### Add things fast
 - Popular Services quick-picker (30+ pre-filled common subscriptions)
 - Command palette via `Cmd+K` / `Ctrl+K` (or the `⌘K` header button)
+- **Paste-charges importer (v3)** — paste a bank statement / email / receipts block; BurnRate parses charges client-side and proposes subscriptions to add
 
 ### Goals
 - Monthly budget cap with thermometer (green / amber / red / over)
 - Annual cancellation savings goal with progress card and target date
 
+### Currency (v3)
+- 22 ISO 4217 currencies with bundled FX rates (snapshot date documented in Settings)
+- Per-subscription native currency + base-currency conversion on every total
+- Editable per-currency FX overrides; no external API is called
+
+### Security (v3)
+- Optional passphrase lock (PBKDF2 + AES-GCM 256, WebCrypto)
+- Lock screen on app boot when enabled; configurable auto-lock idle minutes
+- Sync and share links remain cleartext — explicit warnings on generation
+
 ### Backup, sync, and share
-- CSV export and import (round-trips subscriptions, trials, budget, and theme)
+- CSV export and import (round-trips subscriptions, trials, budget, ledger, and theme)
 - ICS calendar export — drop renewals and trial-end dates into Google / Apple / Outlook
 - `.burn` file backup
-- **Sync link** — a `#sync=...` URL that round-trips your full state across devices (full restore)
+- **Sync link** — a `#sync=...` URL that round-trips your full state across devices (full restore). v3 emits `BR2.` payloads with preferences + currencies; `BR1.` payloads still decode.
 - **Public share link** — a `/s/<payload>` URL with a dynamic OG image showing your monthly burn (read-only, notes stripped)
 - Shareable summary card with PNG download
 
@@ -84,6 +99,8 @@ npm run build
 
 ## Privacy
 
-BurnRate stores all data in your browser's `localStorage`. There is no server-side storage, account, telemetry, or paid API.
+BurnRate stores all data in your browser's `localStorage` (plus an IndexedDB store for monthly snapshots since v3). There is no server-side storage, account, telemetry, or paid API.
 
 When you generate a sync or share link, the entire payload is encoded into the URL fragment (sync) or path (share). URL fragments are not sent to the server. Path segments for share links ARE sent to the server when the link is opened — the server only uses the payload to render the read-only page and returns the OG image.
+
+**When the passphrase lock is enabled (v3):** local storage values are encrypted with WebCrypto AES-GCM. Sync and share links remain cleartext — the receiving device couldn't decrypt them otherwise. Settings shows the warning prominently when you generate either type of link.

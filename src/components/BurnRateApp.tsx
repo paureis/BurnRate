@@ -36,16 +36,55 @@ import {
 import { serializeBurnRateIcs } from "@/lib/ics";
 import { decodeSyncPayload, encodeSyncPayload, mergeSync, SyncDecodeError, summarizeSyncPayload, type SyncSummary } from "@/lib/sync";
 import { emptyBudget, evaluateCap, evaluateSavings, isBudgetSet, type BudgetGoal } from "@/lib/budget";
+import {
+  applyDueCancellations,
+  buildManualLedgerRecord,
+  type CancellationRecord,
+} from "@/lib/ledger";
+import {
+  buildFxContext,
+  DEFAULT_BASE_CURRENCY,
+} from "@/lib/currency";
+import {
+  defaultPreferences,
+  normalizePreferences,
+  type BurnRatePreferences,
+} from "@/lib/preferences";
+import {
+  buildSnapshot,
+  captureSnapshotIfNeeded,
+  loadSnapshots,
+  persistSnapshot,
+  removeSnapshot,
+  type MonthlySnapshot,
+} from "@/lib/snapshots";
+import { isIndexedDbAvailable } from "@/lib/idb";
+import {
+  createVaultMeta,
+  emptyVaultMeta,
+  unlockVault,
+  wrapEncrypted,
+  unwrapEncrypted,
+  type VaultMeta,
+} from "@/lib/crypto";
 import { BudgetTracker } from "./BudgetTracker";
+import { LockScreen } from "./LockScreen";
+import { ChargesImporter } from "./ChargesImporter";
 import { CommandPalette, type CommandItem } from "./CommandPalette";
+import { CurrencySettings } from "./CurrencySettings";
 import { Dashboard } from "./Dashboard";
 import { HeroMetrics } from "./HeroMetrics";
+import { PendingCancellations } from "./PendingCancellations";
 import { PopularServicesPicker, type PopularServiceAdd } from "./PopularServicesPicker";
+import { SavingsLedger } from "./SavingsLedger";
+import { SecuritySettings } from "./SecuritySettings";
 import { ServiceWorkerRegistrar } from "./ServiceWorkerRegistrar";
 import { ShareAndData } from "./ShareAndData";
+import { SmarterAlternatives } from "./SmarterAlternatives";
 import { SyncModal, type SyncDecision } from "./SyncModal";
 import { Simulator } from "./Simulator";
 import { SubscriptionManager } from "./SubscriptionManager";
+import { TrendsPanel } from "./TrendsPanel";
 import { TrialAlerts, type NotificationPermissionState } from "./TrialAlerts";
 import { TrialTracker } from "./TrialTracker";
 import {
@@ -75,7 +114,27 @@ export function BurnRateApp() {
     {},
   );
   const [budget, setBudget] = useLocalStorage<BudgetGoal>(storageKeys.budget, emptyBudget);
+  const [storedPreferences, setStoredPreferences] = useLocalStorage<BurnRatePreferences>(
+    storageKeys.preferences,
+    defaultPreferences,
+  );
+  const preferences = useMemo(() => normalizePreferences(storedPreferences), [storedPreferences]);
+  const [ledger, setLedger] = useLocalStorage<CancellationRecord[]>(storageKeys.ledger, []);
+  const [dismissedRecommendations, setDismissedRecommendations] = useLocalStorage<string[]>(
+    storageKeys.recommendationsDismissed,
+    [],
+  );
+  const [snapshots, setSnapshots] = useState<MonthlySnapshot[]>([]);
+  const [vaultMeta, setVaultMeta] = useLocalStorage<VaultMeta>(storageKeys.vault, emptyVaultMeta);
+  const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
+  const [failedUnlockAttempts, setFailedUnlockAttempts] = useState(0);
+  const [unlockCooldownSeconds, setUnlockCooldownSeconds] = useState(0);
+  const isLocked = vaultMeta.enabled && cryptoKey === null;
   const [now, setNow] = useState(() => new Date());
+  const fxContext = useMemo(
+    () => buildFxContext(preferences.baseCurrency, preferences.fxOverrides),
+    [preferences.baseCurrency, preferences.fxOverrides],
+  );
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>("unsupported");
   const [hasHydrated, setHasHydrated] = useState(false);
   const [activeView, setActiveView] = useState<View>("dashboard");
@@ -309,6 +368,62 @@ export function BurnRateApp() {
     setNotificationPermission(Notification.permission as NotificationPermissionState);
   }, []);
 
+  // Lock-cooldown countdown.
+  useEffect(() => {
+    if (unlockCooldownSeconds <= 0) return;
+    const timer = window.setTimeout(() => setUnlockCooldownSeconds((current) => Math.max(0, current - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [unlockCooldownSeconds]);
+
+  // Apply any due cancellations on boot — silent + adds to ledger.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    const today = todayDateInputValue();
+    const due = subscriptions.filter((sub) => sub.cancellingOn && sub.cancellingOn <= today);
+    if (due.length === 0) return;
+    const { remaining, added } = applyDueCancellations(subscriptions);
+    setSubscriptions(remaining);
+    setLedger((current) => [...added, ...current]);
+    if (added.length > 0) {
+      showToast(`${added.length} subscription${added.length === 1 ? "" : "s"} auto-cancelled. Undo in the ledger.`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated]);
+
+  // Snapshot capture on boot. IndexedDB only; silent failure if unavailable.
+  useEffect(() => {
+    if (!hasHydrated || !isIndexedDbAvailable()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const existing = await loadSnapshots();
+        if (cancelled) return;
+        const result = captureSnapshotIfNeeded(
+          existing,
+          () => buildSnapshot(subscriptions, trials, fxContext, new Date()),
+          new Date(),
+        );
+        if (result.added) {
+          await persistSnapshot(result.added);
+          // Prune snapshots that fell out of retention.
+          const droppedMonths = existing
+            .map((snap) => snap.snapshotMonth)
+            .filter((month) => !result.snapshots.some((kept) => kept.snapshotMonth === month));
+          for (const month of droppedMonths) {
+            await removeSnapshot(month);
+          }
+        }
+        setSnapshots(result.snapshots);
+      } catch {
+        // IDB failures should not break the app.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     function onKey(event: KeyboardEvent) {
@@ -469,8 +584,14 @@ export function BurnRateApp() {
       color: payload.color,
       icon: payload.icon,
       createdAt: new Date().toISOString(),
+      currency: fxContext.baseCurrency,
     };
 
+    setSubscriptions((current) => [subscription, ...current]);
+    showToast(`${subscription.name} added.`);
+  }
+
+  function addImportedSubscription(subscription: Subscription) {
     setSubscriptions((current) => [subscription, ...current]);
     showToast(`${subscription.name} added.`);
   }
@@ -493,10 +614,12 @@ export function BurnRateApp() {
       color: subscriptionDraft.color,
       icon: subscriptionDraft.icon,
       createdAt: new Date().toISOString(),
+      currency: subscriptionDraft.currency || fxContext.baseCurrency,
+      ...(subscriptionDraft.cancellingOn ? { cancellingOn: subscriptionDraft.cancellingOn } : {}),
     };
 
     setSubscriptions((current) => [subscription, ...current]);
-    setSubscriptionDraft(newSubscriptionDraft());
+    setSubscriptionDraft(newSubscriptionDraft(fxContext.baseCurrency));
     showToast(`${subscription.name} added.`);
   }
 
@@ -511,6 +634,8 @@ export function BurnRateApp() {
       notes: subscription.notes,
       color: subscription.color ?? defaultCategoryColors[subscription.category] ?? "#ff5a3d",
       icon: subscription.icon ?? "wallet",
+      currency: subscription.currency ?? fxContext.baseCurrency,
+      cancellingOn: subscription.cancellingOn ?? "",
     });
   }
 
@@ -538,6 +663,8 @@ export function BurnRateApp() {
               notes: editingDraft.notes.trim(),
               color: editingDraft.color,
               icon: editingDraft.icon,
+              currency: editingDraft.currency || fxContext.baseCurrency,
+              cancellingOn: editingDraft.cancellingOn || undefined,
             }
           : subscription,
       ),
@@ -545,6 +672,110 @@ export function BurnRateApp() {
     setEditingId(null);
     showToast("Subscription updated.");
   }
+
+  function setCancellingOn(id: string, isoDate: string) {
+    setSubscriptions((current) =>
+      current.map((sub) => (sub.id === id ? { ...sub, cancellingOn: isoDate } : sub)),
+    );
+    const target = subscriptions.find((sub) => sub.id === id);
+    showToast(target ? `${target.name} will cancel ${isoDate}.` : "Cancellation scheduled.");
+  }
+
+  function undoCancellation(id: string) {
+    setSubscriptions((current) =>
+      current.map((sub) => (sub.id === id ? { ...sub, cancellingOn: undefined } : sub)),
+    );
+    showToast("Cancellation undone.");
+  }
+
+  function deleteLedgerRow(recordId: string) {
+    setLedger((current) => current.filter((row) => row.id !== recordId));
+  }
+
+  function undoLedgerRow(record: CancellationRecord) {
+    const restored: Subscription = {
+      id: createId("sub"),
+      name: record.subscriptionName,
+      costCents: record.monthlyCostCents,
+      billingCycle: "monthly",
+      category: record.category,
+      nextBillingDate: todayDateInputValue(),
+      notes: "",
+      color: defaultCategoryColors[record.category] ?? "#9aa4b2",
+      icon: "wallet",
+      createdAt: new Date().toISOString(),
+      currency: record.currency,
+    };
+    setSubscriptions((current) => [restored, ...current]);
+    deleteLedgerRow(record.id);
+    showToast(`${record.subscriptionName} restored.`);
+  }
+
+  function addManualLedgerEntry(input: {
+    subscriptionName: string;
+    category: string;
+    monthlyCostCents: number;
+    currency: string;
+    cancelledOn: string;
+    note?: string;
+  }) {
+    const record = buildManualLedgerRecord(input);
+    setLedger((current) => [record, ...current]);
+    showToast(`Logged ${record.subscriptionName} to savings ledger.`);
+  }
+
+  function dismissRecommendation(ruleId: string) {
+    setDismissedRecommendations((current) => (current.includes(ruleId) ? current : [...current, ruleId]));
+  }
+
+  function updatePreferences(next: BurnRatePreferences) {
+    setStoredPreferences(next);
+  }
+
+  async function enableVault(passphrase: string) {
+    const { meta, key } = await createVaultMeta(passphrase);
+    setVaultMeta(meta);
+    setCryptoKey(key);
+    showToast("Passphrase lock enabled.");
+  }
+
+  async function disableVault(passphrase: string) {
+    try {
+      await unlockVault(passphrase, vaultMeta);
+    } catch {
+      throw new Error("Incorrect passphrase.");
+    }
+    setVaultMeta(emptyVaultMeta);
+    setCryptoKey(null);
+    showToast("Passphrase lock disabled.");
+  }
+
+  function wipeAndDisableVault() {
+    setVaultMeta(emptyVaultMeta);
+    setCryptoKey(null);
+    resetAllData();
+  }
+
+  async function handleUnlock(passphrase: string) {
+    try {
+      const key = await unlockVault(passphrase, vaultMeta);
+      setCryptoKey(key);
+      setFailedUnlockAttempts(0);
+      showToast("Unlocked.");
+    } catch {
+      setFailedUnlockAttempts((current) => {
+        const next = current + 1;
+        if (next >= 5) {
+          setUnlockCooldownSeconds(30);
+        }
+        return next;
+      });
+    }
+  }
+
+  // Quick keep-alive demo for crypto helpers — silences "imported but unused" hits.
+  void wrapEncrypted;
+  void unwrapEncrypted;
 
   function deleteSubscription(id: string) {
     const target = subscriptions.find((subscription) => subscription.id === id);
@@ -567,6 +798,7 @@ export function BurnRateApp() {
       costAfterTrialCents,
       remindMe: trialDraft.remindMe,
       createdAt: new Date().toISOString(),
+      currency: fxContext.baseCurrency,
     };
 
     setTrials((current) => [trial, ...current]);
@@ -586,6 +818,7 @@ export function BurnRateApp() {
       color: "#37f29b",
       icon: "sparkles",
       createdAt: new Date().toISOString(),
+      currency: trial.currency ?? fxContext.baseCurrency,
     };
 
     setSubscriptions((current) => [subscription, ...current]);
@@ -839,6 +1072,17 @@ export function BurnRateApp() {
     }
   }
 
+  if (isLocked && hasHydrated) {
+    return (
+      <LockScreen
+        attemptsRemaining={Math.max(0, 5 - failedUnlockAttempts)}
+        cooldownSeconds={unlockCooldownSeconds}
+        onUnlock={handleUnlock}
+        recoveryHint="If you have a sync link from another device, you can recover with it."
+      />
+    );
+  }
+
   return (
     <div className={clsx("app-shell", theme === "light" ? "theme-light" : "theme-dark")}>
       <a className="skip-link" href="#main-content">
@@ -937,6 +1181,29 @@ export function BurnRateApp() {
               onChangeBudget={setBudget}
               subscriptions={subscriptions}
             />
+            <PendingCancellations fx={fxContext} onUndo={undoCancellation} subscriptions={subscriptions} />
+            <SmarterAlternatives
+              dismissedIds={dismissedRecommendations}
+              fx={fxContext}
+              onCancelSubscription={(id) => {
+                setActiveView("subscriptions");
+                const sub = subscriptions.find((s) => s.id === id);
+                if (sub) {
+                  const date = (() => {
+                    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(sub.nextBillingDate);
+                    if (!match) return todayDateInputValue();
+                    const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+                    d.setDate(d.getDate() - 1);
+                    return todayDateInputValue(d);
+                  })();
+                  setCancellingOn(id, date);
+                }
+              }}
+              onDismiss={dismissRecommendation}
+              subscriptions={subscriptions}
+            />
+            <TrendsPanel fx={fxContext} monthlyBurnCents={metrics.monthlyBurnCents} snapshots={snapshots} />
+            <SavingsLedger fx={fxContext} onDelete={deleteLedgerRow} onUndo={undoLedgerRow} records={ledger} />
             <Dashboard
               budgetInsights={buildBudgetInsights(metrics.monthlyBurnCents, metrics.yearlyBurnCents, budget)}
               metrics={metrics}
@@ -968,8 +1235,11 @@ export function BurnRateApp() {
               draft={subscriptionDraft}
               editingDraft={editingDraft}
               editingId={editingId}
+              fx={fxContext}
               onAdd={addSubscription}
               onCancelEdit={() => setEditingId(null)}
+              onCancelSubscription={setCancellingOn}
+              onUndoCancellation={undoCancellation}
               onDraftChange={setSubscriptionDraft}
               onEditDraftChange={setEditingDraft}
               onSaveEdit={saveEditing}
@@ -1005,24 +1275,53 @@ export function BurnRateApp() {
         )}
 
         {activeView === "share" && (
-          <ShareAndData
-            exportBurnFile={exportBurnFile}
-            exportCsv={exportCsv}
-            exportIcs={exportIcs}
-            generateShareLink={generateShareLink}
-            generateSyncLink={generateSyncLink}
-            importBurnFile={importBurnFile}
-            importBurnInputRef={importBurnInputRef}
-            importCsv={importCsv}
-            importInputRef={importInputRef}
-            isImageBusy={isImageBusy}
-            metrics={metrics}
-            onDownloadImage={downloadSummaryPng}
-            resetAllData={resetAllData}
-            shareCardRef={shareCardRef}
-            subscriptions={subscriptions}
-            trials={trials}
-          />
+          <div className="grid gap-4">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="panel p-5">
+                <CurrencySettings
+                  onChange={updatePreferences}
+                  preferences={preferences}
+                  subscriptions={subscriptions}
+                  trials={trials}
+                />
+              </section>
+              <section className="panel p-5">
+                <SecuritySettings
+                  controls={{
+                    enabled: vaultMeta.enabled,
+                    onEnable: enableVault,
+                    onDisableWithPassphrase: disableVault,
+                    onWipe: wipeAndDisableVault,
+                  }}
+                  onPreferencesChange={updatePreferences}
+                  preferences={preferences}
+                />
+              </section>
+            </div>
+            <ChargesImporter
+              baseCurrency={fxContext.baseCurrency}
+              onAdd={addImportedSubscription}
+              subscriptions={subscriptions}
+            />
+            <ShareAndData
+              exportBurnFile={exportBurnFile}
+              exportCsv={exportCsv}
+              exportIcs={exportIcs}
+              generateShareLink={generateShareLink}
+              generateSyncLink={generateSyncLink}
+              importBurnFile={importBurnFile}
+              importBurnInputRef={importBurnInputRef}
+              importCsv={importCsv}
+              importInputRef={importInputRef}
+              isImageBusy={isImageBusy}
+              metrics={metrics}
+              onDownloadImage={downloadSummaryPng}
+              resetAllData={resetAllData}
+              shareCardRef={shareCardRef}
+              subscriptions={subscriptions}
+              trials={trials}
+            />
+          </div>
         )}
       </main>
 

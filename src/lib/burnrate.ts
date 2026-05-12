@@ -38,6 +38,11 @@ export interface Subscription {
   color?: string;
   icon?: string;
   createdAt: string;
+  // ISO 4217 code. Optional for v2-compatibility; undefined is treated as USD.
+  currency?: string;
+  // ISO date (YYYY-MM-DD). When set, the sub renders as "Cancelling on X" and
+  // applyDueCancellations() will move it to the ledger once the date passes.
+  cancellingOn?: string | null;
 }
 
 export interface Trial {
@@ -48,15 +53,22 @@ export interface Trial {
   costAfterTrialCents: number;
   remindMe: boolean;
   createdAt: string;
+  currency?: string;
 }
 
 import type { BudgetGoal } from "./budget";
+import type { CancellationRecord } from "./ledger";
+import type { BurnRatePreferences } from "./preferences";
+import type { MonthlySnapshot } from "./snapshots";
 
 export interface BurnRateData {
   subscriptions: Subscription[];
   trials: Trial[];
   theme: Theme;
   budget?: BudgetGoal;
+  preferences?: BurnRatePreferences;
+  ledger?: CancellationRecord[];
+  snapshots?: MonthlySnapshot[];
 }
 
 export interface CategoryBreakdown {
@@ -163,6 +175,32 @@ export function yearlyCostCents(subscription: Pick<Subscription, "billingCycle" 
 
 export function monthlyCostCents(subscription: Pick<Subscription, "billingCycle" | "costCents">): number {
   return Math.round(yearlyCostCents(subscription) / 12);
+}
+
+// Currency-aware variants. Convert the native cost to the base currency
+// before computing. When no FxContext is provided (or sub currency already
+// equals base), this is identical to the native variants.
+import type { FxContext } from "./currency";
+import { convertToBase } from "./currency";
+
+export function monthlyCostInBaseCents(
+  subscription: Pick<Subscription, "billingCycle" | "costCents" | "currency">,
+  fx?: FxContext,
+): number {
+  const native = monthlyCostCents(subscription);
+  const currency = subscription.currency ?? "USD";
+  if (!fx || fx.baseCurrency === currency) return native;
+  return convertToBase(native, currency, fx);
+}
+
+export function yearlyCostInBaseCents(
+  subscription: Pick<Subscription, "billingCycle" | "costCents" | "currency">,
+  fx?: FxContext,
+): number {
+  const native = yearlyCostCents(subscription);
+  const currency = subscription.currency ?? "USD";
+  if (!fx || fx.baseCurrency === currency) return native;
+  return convertToBase(native, currency, fx);
 }
 
 export function calculateBurnMetrics(subscriptions: Subscription[], today = new Date()): BurnMetrics {

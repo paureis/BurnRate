@@ -27,6 +27,8 @@ export interface SubscriptionDraft {
   notes: string;
   color: string;
   icon: string;
+  currency: string;
+  cancellingOn: string;
 }
 
 export interface TrialDraft {
@@ -43,6 +45,10 @@ export const storageKeys = {
   theme: "burnrate.theme.v1",
   trialAlertsDismissed: "burnrate.trialAlertsDismissed.v1",
   budget: "burnrate.budget.v1",
+  preferences: "burnrate.preferences.v1",
+  ledger: "burnrate.ledger.v1",
+  vault: "burnrate.vault.v1",
+  recommendationsDismissed: "burnrate.recommendations.dismissed.v1",
 };
 
 export const iconMap: Record<string, LucideIcon> = {
@@ -74,7 +80,7 @@ export const iconOptions = [
   { value: "activity", label: "Activity" },
 ];
 
-export function newSubscriptionDraft(): SubscriptionDraft {
+export function newSubscriptionDraft(baseCurrency = "USD"): SubscriptionDraft {
   return {
     name: "",
     cost: "",
@@ -84,6 +90,8 @@ export function newSubscriptionDraft(): SubscriptionDraft {
     notes: "",
     color: "#ff5a3d",
     icon: "wallet",
+    currency: baseCurrency,
+    cancellingOn: "",
   };
 }
 

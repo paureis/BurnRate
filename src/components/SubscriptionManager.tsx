@@ -1,6 +1,6 @@
 "use client";
 
-import { ListFilter, Pencil, Plus, Save, Search, Trash2, WalletCards, X } from "lucide-react";
+import { CalendarX, ListFilter, Pencil, Plus, RotateCcw, Save, Search, Trash2, WalletCards, X } from "lucide-react";
 import { clsx } from "clsx";
 import {
   billingCycles,
@@ -8,9 +8,12 @@ import {
   defaultCategoryColors,
   formatCents,
   monthlyCostCents,
+  monthlyCostInBaseCents,
   type BillingCycle,
   type Subscription,
 } from "@/lib/burnrate";
+import { supportedCurrencies } from "@/data/fx-rates";
+import { formatMoney, type FxContext } from "@/lib/currency";
 import { EmptyState } from "./EmptyState";
 import { daysUntilDate, iconMap, iconOptions, type SortKey, type SubscriptionDraft } from "./shared";
 
@@ -21,8 +24,11 @@ export function SubscriptionManager({
   draft,
   editingDraft,
   editingId,
+  fx,
   onAdd,
   onCancelEdit,
+  onCancelSubscription,
+  onUndoCancellation,
   onDraftChange,
   onEditDraftChange,
   onSaveEdit,
@@ -40,8 +46,11 @@ export function SubscriptionManager({
   draft: SubscriptionDraft;
   editingDraft: SubscriptionDraft;
   editingId: string | null;
+  fx: FxContext;
   onAdd: () => void;
   onCancelEdit: () => void;
+  onCancelSubscription: (id: string, isoDate: string) => void;
+  onUndoCancellation: (id: string) => void;
   onDraftChange: (draft: SubscriptionDraft) => void;
   onEditDraftChange: (draft: SubscriptionDraft) => void;
   onSaveEdit: () => void;
@@ -132,7 +141,10 @@ export function SubscriptionManager({
                 <SubscriptionRow
                   key={subscription.id}
                   deleteSubscription={deleteSubscription}
+                  fx={fx}
+                  onCancelSubscription={onCancelSubscription}
                   onStartEdit={onStartEdit}
+                  onUndoCancellation={onUndoCancellation}
                   subscription={subscription}
                 />
               ),
@@ -221,7 +233,7 @@ export function SubscriptionForm({
         </label>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
+      <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
         <label className="label">
           Category
           <input
@@ -235,6 +247,20 @@ export function SubscriptionForm({
               <option key={category} value={category} />
             ))}
           </datalist>
+        </label>
+        <label className="label min-w-28">
+          Currency
+          <select
+            className="input"
+            value={draft.currency}
+            onChange={(event) => onChange({ ...draft, currency: event.target.value })}
+          >
+            {supportedCurrencies.map((code) => (
+              <option key={code} value={code}>
+                {code}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="label min-w-32">
           Color
@@ -285,31 +311,50 @@ export function SubscriptionForm({
 
 export function SubscriptionRow({
   deleteSubscription,
+  fx,
+  onCancelSubscription,
   onStartEdit,
+  onUndoCancellation,
   subscription,
 }: {
   deleteSubscription: (id: string) => void;
+  fx: FxContext;
+  onCancelSubscription: (id: string, isoDate: string) => void;
   onStartEdit: (subscription: Subscription) => void;
+  onUndoCancellation: (id: string) => void;
   subscription: Subscription;
 }) {
   const daysUntil = daysUntilDate(subscription.nextBillingDate);
   const isSoon = daysUntil >= 0 && daysUntil <= 7;
+  const subCurrency = subscription.currency ?? fx.baseCurrency;
+  const monthlyNative = monthlyCostCents(subscription);
+  const monthlyBase = monthlyCostInBaseCents(subscription, fx);
+  const showBase = subCurrency !== fx.baseCurrency;
+  const isCancelling = Boolean(subscription.cancellingOn);
 
   return (
     <article
       className={clsx(
         "grid gap-4 rounded-panel border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 transition md:grid-cols-[1fr_auto_auto]",
-        isSoon && "border-[color:var(--accent)] shadow-glow",
+        isSoon && !isCancelling && "border-[color:var(--accent)] shadow-glow",
+        isCancelling && "border-[color:var(--accent-2)] opacity-90",
       )}
     >
       <div className="flex min-w-0 gap-3">
         <SubscriptionGlyph subscription={subscription} />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-lg font-extrabold">{subscription.name}</h3>
-            {isSoon && (
+            <h3 className={clsx("truncate text-lg font-extrabold", isCancelling && "line-through")}>
+              {subscription.name}
+            </h3>
+            {isSoon && !isCancelling && (
               <span className="rounded-full bg-[color:var(--accent)] px-2 py-1 text-xs font-extrabold text-[#140b08]">
                 {daysUntil === 0 ? "Today" : `${daysUntil}d`}
+              </span>
+            )}
+            {isCancelling && (
+              <span className="rounded-full border border-[color:var(--accent-2)] bg-[color:var(--panel)] px-2 py-1 text-xs font-extrabold text-[color:var(--accent-2)]">
+                Cancelling {subscription.cancellingOn}
               </span>
             )}
           </div>
@@ -320,12 +365,31 @@ export function SubscriptionRow({
         </div>
       </div>
       <div className="grid content-center gap-1 text-left md:text-right">
-        <p className="text-2xl font-extrabold">{formatCents(monthlyCostCents(subscription))}/mo</p>
+        <p className={clsx("text-2xl font-extrabold", isCancelling && "line-through opacity-70")}>
+          {formatMoney(monthlyNative, subCurrency)}/mo
+        </p>
+        {showBase && (
+          <p className="text-xs font-bold text-[color:var(--subtle)]">
+            ≈ {formatMoney(monthlyBase, fx.baseCurrency)}/mo
+          </p>
+        )}
         <p className="text-sm text-[color:var(--muted)]">
-          {formatCents(subscription.costCents)} {subscription.billingCycle}
+          {formatMoney(subscription.costCents, subCurrency)} {subscription.billingCycle}
         </p>
       </div>
       <div className="flex items-center gap-2 md:justify-end">
+        {isCancelling ? (
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={`Undo cancellation of ${subscription.name}`}
+            onClick={() => onUndoCancellation(subscription.id)}
+          >
+            <RotateCcw aria-hidden="true" size={17} />
+          </button>
+        ) : (
+          <CancelOnButton subscription={subscription} onConfirm={(date) => onCancelSubscription(subscription.id, date)} />
+        )}
         <button className="icon-button" type="button" aria-label={`Edit ${subscription.name}`} onClick={() => onStartEdit(subscription)}>
           <Pencil aria-hidden="true" size={17} />
         </button>
@@ -334,6 +398,52 @@ export function SubscriptionRow({
         </button>
       </div>
     </article>
+  );
+}
+
+function CancelOnButton({
+  subscription,
+  onConfirm,
+}: {
+  subscription: Subscription;
+  onConfirm: (isoDate: string) => void;
+}) {
+  // Default date: nextBillingDate minus 1 day (so it cancels before charge).
+  const defaultDate = (() => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(subscription.nextBillingDate);
+    if (!match) return new Date().toISOString().slice(0, 10);
+    const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  return (
+    <details className="relative">
+      <summary
+        className="icon-button list-none cursor-pointer"
+        aria-label={`Schedule cancellation for ${subscription.name}`}
+        role="button"
+      >
+        <CalendarX aria-hidden="true" size={17} />
+      </summary>
+      <form
+        className="absolute right-0 z-10 mt-2 grid w-56 gap-2 rounded-panel border border-[color:var(--line)] bg-[color:var(--panel)] p-3 shadow-2xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = event.currentTarget as HTMLFormElement;
+          const input = form.querySelector<HTMLInputElement>("input[type='date']");
+          if (input?.value) onConfirm(input.value);
+        }}
+      >
+        <label className="label text-xs">
+          Cancel on
+          <input className="input" type="date" defaultValue={defaultDate} />
+        </label>
+        <button className="button-primary text-xs" type="submit">
+          Schedule
+        </button>
+      </form>
+    </details>
   );
 }
 
