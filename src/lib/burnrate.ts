@@ -112,6 +112,16 @@ export interface TrialStatus {
   hasEnded: boolean;
 }
 
+export const TRIAL_ALERT_THRESHOLDS = [1, 3, 7] as const;
+export type TrialAlertThreshold = (typeof TRIAL_ALERT_THRESHOLDS)[number];
+
+export interface TrialAlert {
+  key: string;
+  trial: Trial;
+  threshold: TrialAlertThreshold;
+  daysRemaining: number;
+}
+
 type CsvRow = Record<string, string>;
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -200,6 +210,41 @@ export function calculateSimulatorImpact(
     monthlySavingsCents: Math.max(0, currentMonthlyCents - projectedMonthlyCents),
     yearlySavingsCents: Math.max(0, currentYearlyCents - projectedYearlyCents),
   };
+}
+
+export function trialAlertKey(trialId: string, threshold: TrialAlertThreshold): string {
+  return `${trialId}:${threshold}`;
+}
+
+export function getPendingTrialAlerts(
+  trials: Trial[],
+  dismissed: Record<string, boolean>,
+  today = new Date(),
+): TrialAlert[] {
+  const alerts: TrialAlert[] = [];
+
+  for (const trial of trials) {
+    if (!trial.remindMe) {
+      continue;
+    }
+
+    const daysRemaining = daysBetween(today, trial.trialEndDate);
+    if (daysRemaining < 0) {
+      continue;
+    }
+
+    const applicable = TRIAL_ALERT_THRESHOLDS.find((threshold) => daysRemaining <= threshold);
+    if (applicable === undefined) {
+      continue;
+    }
+    const key = trialAlertKey(trial.id, applicable);
+    if (dismissed[key]) {
+      continue;
+    }
+    alerts.push({ key, trial, threshold: applicable, daysRemaining });
+  }
+
+  return alerts.sort((a, b) => a.daysRemaining - b.daysRemaining || a.trial.name.localeCompare(b.trial.name));
 }
 
 export function getTrialStatus(trial: Trial, today = new Date()): TrialStatus {

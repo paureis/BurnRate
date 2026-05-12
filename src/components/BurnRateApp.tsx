@@ -21,6 +21,8 @@ import {
   createId,
   defaultCategories,
   defaultCategoryColors,
+  formatCents,
+  getPendingTrialAlerts,
   monthlyCostCents,
   parseBurnRateCsv,
   serializeBurnRateCsv,
@@ -36,6 +38,7 @@ import { HeroMetrics } from "./HeroMetrics";
 import { ShareAndData } from "./ShareAndData";
 import { Simulator } from "./Simulator";
 import { SubscriptionManager } from "./SubscriptionManager";
+import { TrialAlerts, type NotificationPermissionState } from "./TrialAlerts";
 import { TrialTracker } from "./TrialTracker";
 import {
   newSubscriptionDraft,
@@ -59,6 +62,13 @@ export function BurnRateApp() {
   const [subscriptions, setSubscriptions] = useLocalStorage<Subscription[]>(storageKeys.subscriptions, []);
   const [trials, setTrials] = useLocalStorage<Trial[]>(storageKeys.trials, []);
   const [theme, setTheme] = useLocalStorage<Theme>(storageKeys.theme, "dark");
+  const [dismissedAlerts, setDismissedAlerts] = useLocalStorage<Record<string, boolean>>(
+    storageKeys.trialAlertsDismissed,
+    {},
+  );
+  const [now, setNow] = useState(() => new Date());
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>("unsupported");
+  const [hasHydrated, setHasHydrated] = useState(false);
   const [activeView, setActiveView] = useState<View>("dashboard");
   const [subscriptionDraft, setSubscriptionDraft] = useState<SubscriptionDraft>(() => newSubscriptionDraft());
   const [trialDraft, setTrialDraft] = useState<TrialDraft>(() => newTrialDraft());
@@ -73,7 +83,11 @@ export function BurnRateApp() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
 
-  const metrics = useMemo(() => calculateBurnMetrics(subscriptions, new Date()), [subscriptions]);
+  const metrics = useMemo(() => calculateBurnMetrics(subscriptions, now), [subscriptions, now]);
+  const pendingAlerts = useMemo(
+    () => getPendingTrialAlerts(trials, dismissedAlerts, now),
+    [dismissedAlerts, now, trials],
+  );
   const simulatorImpact = useMemo(
     () => calculateSimulatorImpact(subscriptions, disabledIds),
     [disabledIds, subscriptions],
@@ -127,6 +141,71 @@ export function BurnRateApp() {
     const timeout = window.setTimeout(() => setToast(""), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    setHasHydrated(true);
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+      return;
+    }
+    setNotificationPermission(Notification.permission as NotificationPermissionState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const refresh = () => setNow(new Date());
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+    const interval = window.setInterval(refresh, 6 * 60 * 60 * 1000);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", refresh);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (notificationPermission !== "granted" || pendingAlerts.length === 0) {
+      return;
+    }
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+      return;
+    }
+
+    const justFired: string[] = [];
+    for (const alert of pendingAlerts) {
+      try {
+        new Notification(`${alert.trial.name} trial ending`, {
+          body:
+            alert.daysRemaining === 0
+              ? `Ends today — becomes ${formatCents(alert.trial.costAfterTrialCents)}/mo.`
+              : `${alert.daysRemaining} day${alert.daysRemaining === 1 ? "" : "s"} left — becomes ${formatCents(alert.trial.costAfterTrialCents)}/mo.`,
+          tag: alert.key,
+        });
+        justFired.push(alert.key);
+      } catch {
+        // Notification constructor can throw on some platforms — fall back to the in-app banner.
+      }
+    }
+
+    if (justFired.length > 0) {
+      setDismissedAlerts((current) => {
+        const next = { ...current };
+        for (const key of justFired) {
+          next[key] = true;
+        }
+        return next;
+      });
+    }
+  }, [notificationPermission, pendingAlerts, setDismissedAlerts]);
 
   function showToast(message: string) {
     setToast(message);
@@ -310,9 +389,32 @@ export function BurnRateApp() {
 
     setSubscriptions([]);
     setTrials([]);
+    setDismissedAlerts({});
     setDisabledIds(new Set());
     setEditingId(null);
     showToast("All data reset.");
+  }
+
+  function dismissAlert(key: string) {
+    setDismissedAlerts((current) => ({ ...current, [key]: true }));
+  }
+
+  async function requestNotificationPermission() {
+    if (typeof window === "undefined" || typeof Notification === "undefined") {
+      showToast("Notifications aren't supported in this browser.");
+      return;
+    }
+    try {
+      const result = await Notification.requestPermission();
+      setNotificationPermission(result as NotificationPermissionState);
+      if (result === "granted") {
+        showToast("Browser notifications enabled.");
+      } else if (result === "denied") {
+        showToast("Browser notifications blocked.");
+      }
+    } catch {
+      showToast("Could not request notification permission.");
+    }
   }
 
   async function downloadSummaryPng() {
@@ -413,6 +515,18 @@ export function BurnRateApp() {
       </header>
 
       <main id="main-content" className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+        {hasHydrated && pendingAlerts.length > 0 && (
+          <div className="mb-5">
+            <TrialAlerts
+              alerts={pendingAlerts}
+              onConvert={convertTrial}
+              onDismiss={dismissAlert}
+              onRequestPermission={requestNotificationPermission}
+              permission={notificationPermission}
+            />
+          </div>
+        )}
+
         {activeView === "dashboard" && (
           <Dashboard
             metrics={metrics}

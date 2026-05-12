@@ -41,6 +41,7 @@ export const storageKeys = {
   subscriptions: "burnrate.subscriptions.v1",
   trials: "burnrate.trials.v1",
   theme: "burnrate.theme.v1",
+  trialAlertsDismissed: "burnrate.trialAlertsDismissed.v1",
 };
 
 export const iconMap: Record<string, LucideIcon> = {

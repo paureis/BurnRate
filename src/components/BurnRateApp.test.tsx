@@ -99,7 +99,7 @@ describe("BurnRateApp flows", () => {
     expect(await screen.findByText("Figma")).toBeInTheDocument();
     expect(screen.getByText("days left")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /convert/i }));
+    await user.click(screen.getAllByRole("button", { name: /convert/i })[0]);
     expect(await screen.findByText("Converted from free trial.")).toBeInTheDocument();
     expect(localStorage.getItem("burnrate.subscriptions.v1")).toContain("Figma");
     expect(localStorage.getItem("burnrate.trials.v1")).not.toContain("Figma");

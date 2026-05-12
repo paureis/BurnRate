@@ -3,11 +3,13 @@ import {
   calculateBurnMetrics,
   calculateSimulatorImpact,
   formatCents,
+  getPendingTrialAlerts,
   getTrialStatus,
   getUpcomingRenewals,
   parseBurnRateCsv,
   serializeBurnRateCsv,
   toCents,
+  trialAlertKey,
   type BurnRateData,
   type Subscription,
   type Trial,
@@ -146,6 +148,58 @@ describe("trial tracker", () => {
       status: "urgent",
       hasEnded: false,
     });
+  });
+});
+
+describe("pending trial alerts", () => {
+  const baseTrial: Trial = {
+    id: "notion",
+    name: "Notion AI",
+    trialStartDate: "2026-05-01",
+    trialEndDate: "2026-05-18",
+    costAfterTrialCents: 2000,
+    remindMe: true,
+    createdAt: "2026-05-01T10:00:00.000Z",
+  };
+
+  it("emits the most urgent un-dismissed threshold per trial", () => {
+    const sevenDay: Trial = { ...baseTrial, id: "seven", trialEndDate: "2026-05-18" };
+    const threeDay: Trial = { ...baseTrial, id: "three", trialEndDate: "2026-05-14" };
+    const oneDay: Trial = { ...baseTrial, id: "one", trialEndDate: "2026-05-12" };
+    const dayOf: Trial = { ...baseTrial, id: "zero", trialEndDate: "2026-05-11" };
+
+    const alerts = getPendingTrialAlerts([sevenDay, threeDay, oneDay, dayOf], {}, today);
+
+    expect(alerts.map((a) => [a.trial.id, a.threshold, a.daysRemaining])).toEqual([
+      ["zero", 1, 0],
+      ["one", 1, 1],
+      ["three", 3, 3],
+      ["seven", 7, 7],
+    ]);
+  });
+
+  it("skips trials when remindMe is false or trial has ended", () => {
+    const muted: Trial = { ...baseTrial, id: "muted", remindMe: false, trialEndDate: "2026-05-12" };
+    const ended: Trial = { ...baseTrial, id: "ended", trialEndDate: "2026-05-10" };
+
+    expect(getPendingTrialAlerts([muted, ended], {}, today)).toEqual([]);
+  });
+
+  it("does not escalate to a less-urgent threshold once the current one is dismissed", () => {
+    const trial: Trial = { ...baseTrial, id: "skip", trialEndDate: "2026-05-14" };
+    const dismissed = { [trialAlertKey("skip", 3)]: true };
+
+    expect(getPendingTrialAlerts([trial], dismissed, today)).toEqual([]);
+  });
+
+  it("still fires a more-urgent threshold after a less-urgent one was dismissed", () => {
+    const trial: Trial = { ...baseTrial, id: "later", trialEndDate: "2026-05-13" };
+    const dismissed = { [trialAlertKey("later", 7)]: true };
+
+    const [alert] = getPendingTrialAlerts([trial], dismissed, today);
+
+    expect(alert.threshold).toBe(3);
+    expect(alert.daysRemaining).toBe(2);
   });
 });
 

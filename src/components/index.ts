@@ -5,4 +5,5 @@ export { HeroMetrics } from "./HeroMetrics";
 export { ShareAndData } from "./ShareAndData";
 export { Simulator } from "./Simulator";
 export { SubscriptionManager } from "./SubscriptionManager";
+export { TrialAlerts } from "./TrialAlerts";
 export { TrialTracker } from "./TrialTracker";

@@ -288,7 +288,7 @@ describe("BurnRateApp extended flows", () => {
     await user.type(screen.getByLabelText(/cost after trial/i), "8");
     await user.click(screen.getByRole("button", { name: /add trial/i }));
 
-    await user.click(screen.getByRole("button", { name: /convert/i }));
+    await user.click(screen.getAllByRole("button", { name: /convert/i })[0]);
 
     // Lands on subscriptions view with the converted entry.
     await waitFor(() => {
