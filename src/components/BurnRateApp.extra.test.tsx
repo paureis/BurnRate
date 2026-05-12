@@ -300,7 +300,7 @@ describe("BurnRateApp extended flows", () => {
   it("rejects a malformed CSV import and surfaces a toast", async () => {
     const user = userEvent.setup();
     const { container } = render(<BurnRateApp />);
-    await user.click(screen.getByRole("button", { name: /share/i }));
+    await user.click(screen.getByRole("button", { name: /settings/i }));
 
     const input = container.querySelector<HTMLInputElement>('input[type="file"]');
     if (!input) throw new Error("File input missing");
@@ -344,7 +344,7 @@ describe("BurnRateApp extended flows", () => {
       nextBillingDate: "2026-06-01",
     });
 
-    await user.click(screen.getByRole("button", { name: /share/i }));
+    await user.click(screen.getByRole("button", { name: /settings/i }));
     await user.click(screen.getByRole("button", { name: /reset all data/i }));
 
     expect(confirm).toHaveBeenCalled();
@@ -357,7 +357,7 @@ describe("BurnRateApp extended flows", () => {
     const user = userEvent.setup();
     render(<BurnRateApp />);
 
-    for (const label of ["Dashboard", "Subscriptions", "Trials", "What If", "Share"]) {
+    for (const label of ["Dashboard", "Subscriptions", "Trials", "What If", "Settings"]) {
       await user.click(screen.getByRole("button", { name: new RegExp(label, "i") }));
       // No console.error / console.warn fires (verified globally in afterEach).
     }

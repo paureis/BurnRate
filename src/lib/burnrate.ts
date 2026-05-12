@@ -50,10 +50,13 @@ export interface Trial {
   createdAt: string;
 }
 
+import type { BudgetGoal } from "./budget";
+
 export interface BurnRateData {
   subscriptions: Subscription[];
   trials: Trial[];
   theme: Theme;
+  budget?: BudgetGoal;
 }
 
 export interface CategoryBreakdown {
@@ -284,6 +287,10 @@ export function serializeBurnRateCsv(data: BurnRateData): string {
     "costAfterTrialCents",
     "remindMe",
     "theme",
+    "monthlyCapCents",
+    "annualSavingsTargetCents",
+    "targetDate",
+    "baselineYearlyCents",
   ];
 
   const rows: CsvRow[] = [
@@ -316,6 +323,18 @@ export function serializeBurnRateCsv(data: BurnRateData): string {
     })),
   ];
 
+  if (data.budget && (data.budget.monthlyCapCents !== null || data.budget.annualSavingsTargetCents !== null)) {
+    rows.push({
+      recordType: "budget",
+      monthlyCapCents: data.budget.monthlyCapCents != null ? String(data.budget.monthlyCapCents) : "",
+      annualSavingsTargetCents:
+        data.budget.annualSavingsTargetCents != null ? String(data.budget.annualSavingsTargetCents) : "",
+      targetDate: data.budget.targetDate ?? "",
+      baselineYearlyCents: data.budget.baselineYearlyCents != null ? String(data.budget.baselineYearlyCents) : "",
+      createdAt: data.budget.createdAt ?? "",
+    });
+  }
+
   return [headers.join(","), ...rows.map((row) => headers.map((header) => escapeCsv(row[header] ?? "")).join(","))].join(
     "\n",
   );
@@ -340,8 +359,27 @@ export function parseBurnRateCsv(csv: string): BurnRateData {
     .filter((row) => row.recordType === "subscription" || (!row.recordType && row.name))
     .map(rowToSubscription);
   const trials = rows.filter((row) => row.recordType === "trial").map(rowToTrial);
+  const budgetRow = rows.find((row) => row.recordType === "budget");
+  const budget = budgetRow
+    ? {
+        monthlyCapCents: budgetRow.monthlyCapCents ? parseIntegerOrNull(budgetRow.monthlyCapCents) : null,
+        annualSavingsTargetCents: budgetRow.annualSavingsTargetCents
+          ? parseIntegerOrNull(budgetRow.annualSavingsTargetCents)
+          : null,
+        targetDate: budgetRow.targetDate || null,
+        baselineYearlyCents: budgetRow.baselineYearlyCents
+          ? parseIntegerOrNull(budgetRow.baselineYearlyCents)
+          : null,
+        createdAt: budgetRow.createdAt || null,
+      }
+    : undefined;
 
-  return { subscriptions, trials, theme };
+  return { subscriptions, trials, theme, ...(budget ? { budget } : {}) };
+}
+
+function parseIntegerOrNull(value: string): number | null {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function createId(prefix: string): string {

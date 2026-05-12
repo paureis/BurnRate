@@ -1,10 +1,16 @@
 "use client";
 
-import { ArrowDownToLine, Download, Flame, Trash2, Upload } from "lucide-react";
+import { ArrowDownToLine, CalendarDays, Download, FileDown, Flame, Link2, Trash2, Upload } from "lucide-react";
 import { calculateBurnMetrics, formatCents, type Subscription, type Trial } from "@/lib/burnrate";
 
 export function ShareAndData({
+  exportBurnFile,
   exportCsv,
+  exportIcs,
+  generateShareLink,
+  generateSyncLink,
+  importBurnFile,
+  importBurnInputRef,
   importCsv,
   importInputRef,
   isImageBusy,
@@ -15,7 +21,13 @@ export function ShareAndData({
   subscriptions,
   trials,
 }: {
+  exportBurnFile: () => void;
   exportCsv: () => void;
+  exportIcs: () => void;
+  generateShareLink: () => void;
+  generateSyncLink: () => void;
+  importBurnFile: (file: File | null) => void;
+  importBurnInputRef: React.RefObject<HTMLInputElement | null>;
   importCsv: (file: File | null) => void;
   importInputRef: React.RefObject<HTMLInputElement | null>;
   isImageBusy: boolean;
@@ -43,8 +55,10 @@ export function ShareAndData({
       </section>
 
       <section className="panel p-5">
-        <h2 className="text-xl font-extrabold">Data management</h2>
-        <div className="mt-5 grid gap-3">
+        <h2 className="text-xl font-extrabold">Settings &amp; Data</h2>
+
+        <h3 className="mt-5 text-sm font-extrabold uppercase tracking-[0.18em] text-[color:var(--accent-2)]">Backup</h3>
+        <div className="mt-2 grid gap-3">
           <button className="button-secondary justify-start" type="button" onClick={exportCsv}>
             <ArrowDownToLine aria-hidden="true" size={17} />
             Export CSV
@@ -60,11 +74,62 @@ export function ShareAndData({
             onChange={(event) => void importCsv(event.target.files?.[0] ?? null)}
             type="file"
           />
+          <div>
+            <button className="button-secondary w-full justify-start" type="button" onClick={exportIcs}>
+              <CalendarDays aria-hidden="true" size={17} />
+              Download .ics calendar
+            </button>
+            <p className="mt-2 text-xs font-bold text-[color:var(--muted)]">
+              Imports renewals and trial-end dates into Google Calendar, Apple Calendar, or Outlook.
+            </p>
+          </div>
+          <button className="button-secondary justify-start" type="button" onClick={exportBurnFile}>
+            <FileDown aria-hidden="true" size={17} />
+            Save .burn file
+          </button>
+          <button className="button-secondary justify-start" type="button" onClick={() => importBurnInputRef.current?.click()}>
+            <Upload aria-hidden="true" size={17} />
+            Load .burn file
+          </button>
+          <input
+            ref={importBurnInputRef}
+            accept=".burn,text/plain"
+            className="hidden"
+            onChange={(event) => void importBurnFile(event.target.files?.[0] ?? null)}
+            type="file"
+          />
+        </div>
+
+        <h3 className="mt-6 text-sm font-extrabold uppercase tracking-[0.18em] text-[color:var(--accent-2)]">Sync</h3>
+        <div className="mt-2 grid gap-3">
+          <p className="rounded-panel border border-[color:var(--accent-2)] bg-[color:var(--panel-strong)] p-3 text-xs font-bold text-[color:var(--accent-2)]">
+            Anyone with this link can see your data. Don&apos;t share publicly.
+          </p>
+          <button className="button-secondary justify-start" type="button" onClick={generateSyncLink}>
+            <Link2 aria-hidden="true" size={17} />
+            Generate sync link
+          </button>
+        </div>
+
+        <h3 className="mt-6 text-sm font-extrabold uppercase tracking-[0.18em] text-[color:var(--accent-2)]">Share</h3>
+        <div className="mt-2 grid gap-3">
+          <p className="rounded-panel border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-3 text-xs font-bold text-[color:var(--muted)]">
+            Public link shows your totals and top categories. Notes are removed.
+          </p>
+          <button className="button-secondary justify-start" type="button" onClick={generateShareLink}>
+            <Link2 aria-hidden="true" size={17} />
+            Create public share link
+          </button>
+        </div>
+
+        <h3 className="mt-6 text-sm font-extrabold uppercase tracking-[0.18em] text-[color:var(--danger)]">Danger zone</h3>
+        <div className="mt-2 grid gap-3">
           <button className="button-secondary justify-start text-[color:var(--danger)]" type="button" onClick={resetAllData}>
             <Trash2 aria-hidden="true" size={17} />
             Reset all data
           </button>
         </div>
+
         <div className="mt-6 grid grid-cols-3 gap-3">
           <MiniStat label="Subs" value={String(subscriptions.length)} />
           <MiniStat label="Trials" value={String(trials.length)} />

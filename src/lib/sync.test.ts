@@ -1,0 +1,172 @@
+import { describe, expect, it } from "vitest";
+import type { BurnRateData, Subscription, Trial } from "@/lib/burnrate";
+import { decodeSyncPayload, encodeSyncPayload, mergeSync, SyncDecodeError, summarizeSyncPayload } from "@/lib/sync";
+
+function makeSubscription(overrides: Partial<Subscription> = {}): Subscription {
+  return {
+    id: overrides.id ?? "sub-" + Math.random().toString(36).slice(2, 8),
+    name: overrides.name ?? "Netflix",
+    costCents: overrides.costCents ?? 1599,
+    billingCycle: overrides.billingCycle ?? "monthly",
+    category: overrides.category ?? "entertainment",
+    nextBillingDate: overrides.nextBillingDate ?? "2026-06-01",
+    notes: overrides.notes ?? "",
+    color: overrides.color,
+    icon: overrides.icon,
+    createdAt: overrides.createdAt ?? "2026-01-01T00:00:00.000Z",
+  };
+}
+
+function makeTrial(overrides: Partial<Trial> = {}): Trial {
+  return {
+    id: overrides.id ?? "trial-" + Math.random().toString(36).slice(2, 8),
+    name: overrides.name ?? "Linear",
+    trialStartDate: overrides.trialStartDate ?? "2026-05-01",
+    trialEndDate: overrides.trialEndDate ?? "2026-05-30",
+    costAfterTrialCents: overrides.costAfterTrialCents ?? 800,
+    remindMe: overrides.remindMe ?? true,
+    createdAt: overrides.createdAt ?? "2026-01-01T00:00:00.000Z",
+  };
+}
+
+function makeFixture(seed: number): BurnRateData {
+  const subscriptionsCount = (seed % 5) + 1;
+  const subscriptions: Subscription[] = [];
+  for (let i = 0; i < subscriptionsCount; i += 1) {
+    subscriptions.push(
+      makeSubscription({
+        id: `sub-${seed}-${i}`,
+        name: `Service Ω${seed}-${i} 🎉`,
+        costCents: (seed * 13 + i * 7) % 99999,
+        billingCycle: (["weekly", "monthly", "quarterly", "yearly"] as const)[i % 4],
+      }),
+    );
+  }
+  const trialsCount = seed % 3;
+  const trials: Trial[] = [];
+  for (let i = 0; i < trialsCount; i += 1) {
+    trials.push(makeTrial({ id: `trial-${seed}-${i}`, name: `Trial Δ${seed}-${i}` }));
+  }
+  return { subscriptions, trials, theme: seed % 2 === 0 ? "dark" : "light" };
+}
+
+describe("encodeSyncPayload / decodeSyncPayload", () => {
+  it("round-trips an empty payload", () => {
+    const data: BurnRateData = { subscriptions: [], trials: [], theme: "dark" };
+    const encoded = encodeSyncPayload(data);
+    expect(encoded.startsWith("BR1.")).toBe(true);
+    expect(decodeSyncPayload(encoded)).toEqual(data);
+  });
+
+  it("round-trips arbitrary fixtures including unicode names (property style)", () => {
+    for (let seed = 1; seed <= 25; seed += 1) {
+      const fixture = makeFixture(seed);
+      const encoded = encodeSyncPayload(fixture);
+      const decoded = decodeSyncPayload(encoded);
+      expect(decoded).toEqual(fixture);
+    }
+  });
+
+  it("throws on tampering (flipping one byte in the payload)", () => {
+    const data: BurnRateData = {
+      subscriptions: [makeSubscription({ name: "Netflix" })],
+      trials: [],
+      theme: "dark",
+    };
+    const encoded = encodeSyncPayload(data);
+    const middle = Math.floor(encoded.length / 2);
+    const flipped = encoded.slice(0, middle) + (encoded[middle] === "A" ? "B" : "A") + encoded.slice(middle + 1);
+
+    expect(() => decodeSyncPayload(flipped)).toThrow(SyncDecodeError);
+  });
+
+  it("throws on unknown schema version prefix", () => {
+    expect(() => decodeSyncPayload("BR2.somethingelse")).toThrowError(/Unsupported sync payload version/);
+  });
+
+  it("throws on missing prefix", () => {
+    expect(() => decodeSyncPayload("XYZ1.garbage")).toThrowError(/missing the BR1\. prefix/);
+  });
+
+  it("throws on empty body", () => {
+    expect(() => decodeSyncPayload("BR1.")).toThrow(SyncDecodeError);
+  });
+
+  it("throws on undecompressible body", () => {
+    expect(() => decodeSyncPayload("BR1.~~not-valid-lzstring~~")).toThrow(SyncDecodeError);
+  });
+
+  it("decoded payload retains unicode names and large numbers", () => {
+    const data: BurnRateData = {
+      subscriptions: [
+        makeSubscription({ name: "Café ☕ 漢字", costCents: 12345678 }),
+        makeSubscription({ name: "Émilie", costCents: 1 }),
+      ],
+      trials: [makeTrial({ name: "βeta" })],
+      theme: "light",
+    };
+    const decoded = decodeSyncPayload(encodeSyncPayload(data));
+    expect(decoded).toEqual(data);
+  });
+
+  it("encoded payloads are URL-safe (no fragment-breaking characters)", () => {
+    const data: BurnRateData = {
+      subscriptions: [makeSubscription({ name: "Notion #1" }), makeSubscription({ name: "Trello/Boards" })],
+      trials: [],
+      theme: "dark",
+    };
+    const encoded = encodeSyncPayload(data);
+    // No spaces, no raw # or & or = characters that would break a URL fragment.
+    expect(encoded).not.toMatch(/[\s#&=]/);
+  });
+});
+
+describe("summarizeSyncPayload", () => {
+  it("returns counts and byte size", () => {
+    const data: BurnRateData = {
+      subscriptions: [makeSubscription(), makeSubscription({ id: "sub-2", name: "Spotify" })],
+      trials: [makeTrial()],
+      theme: "dark",
+    };
+    const encoded = encodeSyncPayload(data);
+    const summary = summarizeSyncPayload(encoded);
+    expect(summary.subscriptionsCount).toBe(2);
+    expect(summary.trialsCount).toBe(1);
+    expect(summary.bytes).toBe(encoded.length);
+  });
+});
+
+describe("mergeSync", () => {
+  it("appends incoming subscriptions and trials when names do not collide", () => {
+    const current: BurnRateData = {
+      subscriptions: [makeSubscription({ name: "Netflix" })],
+      trials: [],
+      theme: "dark",
+    };
+    const incoming: BurnRateData = {
+      subscriptions: [makeSubscription({ name: "Spotify" })],
+      trials: [makeTrial({ name: "Linear" })],
+      theme: "light",
+    };
+    const merged = mergeSync(current, incoming);
+    expect(merged.subscriptions.map((s) => s.name).sort()).toEqual(["Netflix", "Spotify"]);
+    expect(merged.trials.map((t) => t.name)).toEqual(["Linear"]);
+    expect(merged.theme).toBe("dark");
+  });
+
+  it("keeps existing subscription when name collides (case-insensitive)", () => {
+    const current: BurnRateData = {
+      subscriptions: [makeSubscription({ name: "Netflix", costCents: 100 })],
+      trials: [],
+      theme: "dark",
+    };
+    const incoming: BurnRateData = {
+      subscriptions: [makeSubscription({ name: "netflix", costCents: 99999 })],
+      trials: [],
+      theme: "dark",
+    };
+    const merged = mergeSync(current, incoming);
+    expect(merged.subscriptions).toHaveLength(1);
+    expect(merged.subscriptions[0].costCents).toBe(100);
+  });
+});

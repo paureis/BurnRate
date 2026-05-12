@@ -33,9 +33,17 @@ import {
   type Theme,
   type Trial,
 } from "@/lib/burnrate";
+import { serializeBurnRateIcs } from "@/lib/ics";
+import { decodeSyncPayload, encodeSyncPayload, mergeSync, SyncDecodeError, summarizeSyncPayload, type SyncSummary } from "@/lib/sync";
+import { emptyBudget, evaluateCap, evaluateSavings, isBudgetSet, type BudgetGoal } from "@/lib/budget";
+import { BudgetTracker } from "./BudgetTracker";
+import { CommandPalette, type CommandItem } from "./CommandPalette";
 import { Dashboard } from "./Dashboard";
 import { HeroMetrics } from "./HeroMetrics";
+import { PopularServicesPicker, type PopularServiceAdd } from "./PopularServicesPicker";
+import { ServiceWorkerRegistrar } from "./ServiceWorkerRegistrar";
 import { ShareAndData } from "./ShareAndData";
+import { SyncModal, type SyncDecision } from "./SyncModal";
 import { Simulator } from "./Simulator";
 import { SubscriptionManager } from "./SubscriptionManager";
 import { TrialAlerts, type NotificationPermissionState } from "./TrialAlerts";
@@ -55,7 +63,7 @@ const views: Array<{ id: View; label: string; Icon: LucideIcon }> = [
   { id: "subscriptions", label: "Subscriptions", Icon: WalletCards },
   { id: "trials", label: "Trials", Icon: BellRing },
   { id: "simulator", label: "What If", Icon: RefreshCcw },
-  { id: "share", label: "Share", Icon: Share2 },
+  { id: "share", label: "Settings", Icon: Share2 },
 ];
 
 export function BurnRateApp() {
@@ -66,6 +74,7 @@ export function BurnRateApp() {
     storageKeys.trialAlertsDismissed,
     {},
   );
+  const [budget, setBudget] = useLocalStorage<BudgetGoal>(storageKeys.budget, emptyBudget);
   const [now, setNow] = useState(() => new Date());
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermissionState>("unsupported");
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -78,9 +87,17 @@ export function BurnRateApp() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [disabledIds, setDisabledIds] = useState<Set<string>>(() => new Set());
-  const [toast, setToast] = useState("");
+  const [toasts, setToasts] = useState<Array<{ id: number; message: string }>>([]);
+  const toastIdRef = useRef(0);
   const [isImageBusy, setIsImageBusy] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncSummary, setSyncSummary] = useState<SyncSummary | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [pendingSyncPayload, setPendingSyncPayload] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const importBurnInputRef = useRef<HTMLInputElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
 
   const metrics = useMemo(() => calculateBurnMetrics(subscriptions, now), [subscriptions, now]);
@@ -92,6 +109,146 @@ export function BurnRateApp() {
     () => calculateSimulatorImpact(subscriptions, disabledIds),
     [disabledIds, subscriptions],
   );
+
+  const paletteCommands = useMemo<CommandItem[]>(() => {
+    const items: CommandItem[] = [
+      {
+        id: "open-dashboard",
+        label: "Open dashboard",
+        keywords: "view home metrics",
+        action: () => setActiveView("dashboard"),
+      },
+      {
+        id: "open-subscriptions",
+        label: "Open subscriptions",
+        keywords: "view list manage",
+        action: () => setActiveView("subscriptions"),
+      },
+      {
+        id: "open-trials",
+        label: "Open trials",
+        keywords: "view free",
+        action: () => setActiveView("trials"),
+      },
+      {
+        id: "open-simulator",
+        label: "Open simulator",
+        keywords: "view what if",
+        action: () => setActiveView("simulator"),
+      },
+      {
+        id: "open-share",
+        label: "Open settings and data",
+        keywords: "share view export",
+        action: () => setActiveView("share"),
+      },
+      {
+        id: "add-subscription",
+        label: "Add subscription",
+        keywords: "new recurring",
+        action: () => {
+          setActiveView("subscriptions");
+          window.setTimeout(() => document.getElementById("add-subscription-name")?.focus(), 50);
+        },
+      },
+      {
+        id: "add-trial",
+        label: "Add free trial",
+        keywords: "new trial countdown",
+        action: () => {
+          setActiveView("trials");
+          window.setTimeout(() => {
+            const target = document.querySelector<HTMLInputElement>("input[placeholder*='Notion']");
+            target?.focus();
+          }, 50);
+        },
+      },
+      {
+        id: "toggle-theme",
+        label: "Toggle dark/light mode",
+        keywords: "color scheme",
+        action: () => setTheme((current) => (current === "dark" ? "light" : "dark")),
+      },
+      {
+        id: "export-csv",
+        label: "Export CSV",
+        keywords: "download backup",
+        action: () => exportCsv(),
+      },
+      {
+        id: "export-ics",
+        label: "Export ICS calendar",
+        keywords: "calendar download",
+        action: () => exportIcs(),
+      },
+      {
+        id: "generate-sync-link",
+        label: "Generate sync link",
+        keywords: "url share device",
+        action: () => void generateSyncLink(),
+      },
+      {
+        id: "generate-share-link",
+        label: "Create public share link",
+        keywords: "public og",
+        action: () => void generateShareLink(),
+      },
+      {
+        id: "download-share-image",
+        label: "Download share image",
+        keywords: "png screenshot",
+        action: () => void downloadSummaryPng(),
+      },
+      {
+        id: "set-monthly-cap",
+        label: "Set monthly budget cap",
+        keywords: "limit ceiling",
+        action: () => setActiveView("dashboard"),
+      },
+      {
+        id: "set-savings-goal",
+        label: "Set savings goal",
+        keywords: "annual target",
+        action: () => setActiveView("dashboard"),
+      },
+      {
+        id: "open-popular",
+        label: "Open popular services picker",
+        keywords: "add quick netflix",
+        action: () => {
+          setActiveView("subscriptions");
+          setPickerOpen(true);
+        },
+      },
+      {
+        id: "reset-data",
+        label: "Reset all data",
+        keywords: "danger clear wipe",
+        action: () => resetAllData(),
+      },
+    ];
+
+    for (const subscription of subscriptions) {
+      items.push({
+        id: `edit-${subscription.id}`,
+        label: `Edit ${subscription.name}`,
+        keywords: subscription.category,
+        action: () => {
+          setActiveView("subscriptions");
+          startEditing(subscription);
+        },
+      });
+      items.push({
+        id: `delete-${subscription.id}`,
+        label: `Delete ${subscription.name}`,
+        keywords: subscription.category,
+        action: () => deleteSubscription(subscription.id),
+      });
+    }
+
+    return items;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriptions]);
   const categoryOptions = useMemo(() => {
     const values = new Set<string>(defaultCategories);
     subscriptions.forEach((subscription) => values.add(subscription.category));
@@ -134,13 +291,15 @@ export function BurnRateApp() {
   }, [subscriptions]);
 
   useEffect(() => {
-    if (!toast) {
+    if (toasts.length === 0) {
       return;
     }
-
-    const timeout = window.setTimeout(() => setToast(""), 2400);
+    const oldest = toasts[0];
+    const timeout = window.setTimeout(() => {
+      setToasts((current) => current.filter((entry) => entry.id !== oldest.id));
+    }, 2400);
     return () => window.clearTimeout(timeout);
-  }, [toast]);
+  }, [toasts]);
 
   useEffect(() => {
     setHasHydrated(true);
@@ -148,6 +307,36 @@ export function BurnRateApp() {
       return;
     }
     setNotificationPermission(Notification.permission as NotificationPermissionState);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onKey(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((current) => !current);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (!hash.startsWith("#sync=")) return;
+    const payload = hash.slice("#sync=".length);
+    setPendingSyncPayload(payload);
+    try {
+      const summary = summarizeSyncPayload(payload);
+      setSyncSummary(summary);
+      setSyncError(null);
+    } catch (error) {
+      const message = error instanceof SyncDecodeError ? error.message : "Sync payload could not be read.";
+      setSyncSummary(null);
+      setSyncError(message);
+    }
+    setSyncModalOpen(true);
   }, []);
 
   useEffect(() => {
@@ -208,7 +397,82 @@ export function BurnRateApp() {
   }, [notificationPermission, pendingAlerts, setDismissedAlerts]);
 
   function showToast(message: string) {
-    setToast(message);
+    const id = ++toastIdRef.current;
+    setToasts((current) => {
+      const next = [...current, { id, message }];
+      return next.slice(-3);
+    });
+  }
+
+  function buildBudgetInsights(monthlyCents: number, yearlyCents: number, currentBudget: BudgetGoal) {
+    if (!isBudgetSet(currentBudget)) return [];
+    const cap = evaluateCap(monthlyCents, currentBudget);
+    const savings = evaluateSavings(yearlyCents, currentBudget);
+    const insights: Array<{ id: string; title: string; detail: string; tone: "good" | "neutral" | "warning" | "danger" }> = [];
+    if (cap.hasCap) {
+      if (cap.tone === "over") {
+        insights.push({
+          id: "budget-over",
+          title: `Over your ${formatCents(cap.capCents)} cap`,
+          detail: `Your monthly burn exceeds the cap by ${formatCents(-cap.remainingCents)}.`,
+          tone: "danger",
+        });
+      } else if (cap.tone === "danger" || cap.tone === "warning") {
+        insights.push({
+          id: "budget-near",
+          title: `${Math.round(cap.ratio * 100)}% of monthly cap used`,
+          detail: `${formatCents(cap.remainingCents)} is left before you hit the ${formatCents(cap.capCents)} ceiling.`,
+          tone: cap.tone === "danger" ? "danger" : "warning",
+        });
+      } else {
+        insights.push({
+          id: "budget-good",
+          title: `Comfortably under your monthly cap`,
+          detail: `${formatCents(cap.remainingCents)} of headroom this month.`,
+          tone: "good",
+        });
+      }
+    }
+    if (savings.hasGoal) {
+      const percent = Math.max(0, Math.round(savings.ratio * 100));
+      const remaining = Math.max(0, savings.targetCents - savings.savedYearlyCents);
+      insights.push({
+        id: "budget-savings",
+        title: `${percent}% to your ${formatCents(savings.targetCents)} savings goal`,
+        detail:
+          savings.targetDate != null
+            ? `${formatCents(remaining)} to go by ${savings.targetDate}.`
+            : `${formatCents(remaining)} to go.`,
+        tone: percent >= 100 ? "good" : "neutral",
+      });
+      if (savings.savedYearlyCents > 0) {
+        insights.push({
+          id: "budget-saved",
+          title: `You've saved ${formatCents(savings.savedYearlyCents)} per year`,
+          detail: savings.baselineDate ? `Since ${savings.baselineDate.slice(0, 10)}.` : "Since you set the baseline.",
+          tone: "good",
+        });
+      }
+    }
+    return insights;
+  }
+
+  function addFromPopular(payload: PopularServiceAdd) {
+    const subscription: Subscription = {
+      id: createId("sub"),
+      name: payload.name,
+      costCents: payload.costCents,
+      billingCycle: payload.billingCycle,
+      category: payload.category,
+      nextBillingDate: payload.nextBillingDate,
+      notes: "",
+      color: payload.color,
+      icon: payload.icon,
+      createdAt: new Date().toISOString(),
+    };
+
+    setSubscriptions((current) => [subscription, ...current]);
+    showToast(`${subscription.name} added.`);
   }
 
   function addSubscription() {
@@ -349,7 +613,7 @@ export function BurnRateApp() {
   }
 
   function exportCsv() {
-    const data: BurnRateData = { subscriptions, trials, theme };
+    const data: BurnRateData = { subscriptions, trials, theme, budget };
     const blob = new Blob([serializeBurnRateCsv(data)], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -358,6 +622,129 @@ export function BurnRateApp() {
     link.click();
     URL.revokeObjectURL(url);
     showToast("CSV exported.");
+  }
+
+  async function generateSyncLink() {
+    const data: BurnRateData = { subscriptions, trials, theme };
+    const payload = encodeSyncPayload(data);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/#sync=${payload}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        showToast(`Sync link copied (${payload.length} chars).`);
+        if (payload.length > 30000) {
+          showToast("Sync payload is large — consider saving a .burn file instead.");
+        }
+      } else {
+        showToast("Clipboard unavailable — save a .burn file instead.");
+      }
+    } catch {
+      showToast("Clipboard blocked — save a .burn file instead.");
+    }
+  }
+
+  async function generateShareLink() {
+    const stripped: BurnRateData = {
+      subscriptions: subscriptions.map((subscription) => ({ ...subscription, notes: "" })),
+      trials: trials.map((trial) => ({ ...trial })),
+      theme,
+    };
+    const payload = encodeSyncPayload(stripped);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const url = `${origin}/s/${payload}`;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        showToast("Public share link copied.");
+      } else {
+        showToast("Clipboard unavailable.");
+      }
+    } catch {
+      showToast("Could not copy share link.");
+    }
+  }
+
+  function exportBurnFile() {
+    const data: BurnRateData = { subscriptions, trials, theme };
+    const payload = encodeSyncPayload(data);
+    const blob = new Blob([payload], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `burnrate-${todayDateInputValue()}.burn`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("Saved .burn file.");
+  }
+
+  async function importBurnFile(file: File | null) {
+    if (!file) return;
+    try {
+      const payload = (await file.text()).trim();
+      const summary = summarizeSyncPayload(payload);
+      setPendingSyncPayload(payload);
+      setSyncSummary(summary);
+      setSyncError(null);
+      setSyncModalOpen(true);
+    } catch (error) {
+      const message = error instanceof SyncDecodeError ? error.message : "Could not read .burn file.";
+      setPendingSyncPayload(null);
+      setSyncSummary(null);
+      setSyncError(message);
+      setSyncModalOpen(true);
+    } finally {
+      if (importBurnInputRef.current) {
+        importBurnInputRef.current.value = "";
+      }
+    }
+  }
+
+  function handleSyncDecision(decision: SyncDecision) {
+    if (decision === "cancel" || !pendingSyncPayload) {
+      setSyncModalOpen(false);
+      setPendingSyncPayload(null);
+      setSyncSummary(null);
+      setSyncError(null);
+      if (typeof window !== "undefined" && window.location.hash.startsWith("#sync=")) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+      return;
+    }
+    try {
+      const incoming = decodeSyncPayload(pendingSyncPayload);
+      const current: BurnRateData = { subscriptions, trials, theme };
+      const next = decision === "replace" ? incoming : mergeSync(current, incoming);
+      setSubscriptions(next.subscriptions);
+      setTrials(next.trials);
+      if (decision === "replace") {
+        setTheme(next.theme);
+      }
+      showToast(decision === "replace" ? "Data replaced from sync link." : "Data merged from sync link.");
+    } catch (error) {
+      const message = error instanceof SyncDecodeError ? error.message : "Sync failed.";
+      showToast(message);
+    } finally {
+      setSyncModalOpen(false);
+      setPendingSyncPayload(null);
+      setSyncSummary(null);
+      setSyncError(null);
+      if (typeof window !== "undefined" && window.location.hash.startsWith("#sync=")) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    }
+  }
+
+  function exportIcs() {
+    const data: BurnRateData = { subscriptions, trials, theme };
+    const blob = new Blob([serializeBurnRateIcs(data)], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `burnrate-calendar-${todayDateInputValue()}.ics`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("Calendar exported.");
   }
 
   async function importCsv(file: File | null) {
@@ -370,6 +757,7 @@ export function BurnRateApp() {
       setSubscriptions(parsed.subscriptions);
       setTrials(parsed.trials);
       setTheme(parsed.theme);
+      setBudget(parsed.budget ?? emptyBudget);
       setDisabledIds(new Set());
       showToast("CSV imported.");
     } catch {
@@ -390,6 +778,7 @@ export function BurnRateApp() {
     setSubscriptions([]);
     setTrials([]);
     setDismissedAlerts({});
+    setBudget(emptyBudget);
     setDisabledIds(new Set());
     setEditingId(null);
     showToast("All data reset.");
@@ -471,6 +860,15 @@ export function BurnRateApp() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <ServiceWorkerRegistrar />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Open command palette"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <span className="text-xs font-extrabold tracking-tight">⌘K</span>
+            </button>
             <button
               className="button-secondary"
               type="button"
@@ -528,35 +926,62 @@ export function BurnRateApp() {
         )}
 
         {activeView === "dashboard" && (
-          <Dashboard
-            metrics={metrics}
-            subscriptions={subscriptions}
-            trials={trials}
-            onQuickAdd={() => setActiveView("subscriptions")}
-          />
+          <div className="grid gap-4">
+            {subscriptions.length === 0 && (
+              <PopularServicesPicker existing={subscriptions} onAdd={addFromPopular} />
+            )}
+            <BudgetTracker
+              budget={budget}
+              monthlyBurnCents={metrics.monthlyBurnCents}
+              yearlyBurnCents={metrics.yearlyBurnCents}
+              onChangeBudget={setBudget}
+              subscriptions={subscriptions}
+            />
+            <Dashboard
+              budgetInsights={buildBudgetInsights(metrics.monthlyBurnCents, metrics.yearlyBurnCents, budget)}
+              metrics={metrics}
+              subscriptions={subscriptions}
+              trials={trials}
+              onQuickAdd={() => setActiveView("subscriptions")}
+            />
+          </div>
         )}
 
         {activeView === "subscriptions" && (
-          <SubscriptionManager
-            categoryFilter={categoryFilter}
-            categoryOptions={categoryOptions}
-            deleteSubscription={deleteSubscription}
-            draft={subscriptionDraft}
-            editingDraft={editingDraft}
-            editingId={editingId}
-            onAdd={addSubscription}
-            onCancelEdit={() => setEditingId(null)}
-            onDraftChange={setSubscriptionDraft}
-            onEditDraftChange={setEditingDraft}
-            onSaveEdit={saveEditing}
-            onStartEdit={startEditing}
-            searchQuery={searchQuery}
-            setCategoryFilter={setCategoryFilter}
-            setSearchQuery={setSearchQuery}
-            setSortKey={setSortKey}
-            sortKey={sortKey}
-            subscriptions={visibleSubscriptions}
-          />
+          <div className="grid gap-4">
+            <div className="flex justify-end">
+              <button
+                className="button-secondary"
+                type="button"
+                aria-expanded={pickerOpen}
+                onClick={() => setPickerOpen((current) => !current)}
+              >
+                <Plus aria-hidden="true" size={17} />
+                {pickerOpen ? "Hide popular services" : "Add from popular services"}
+              </button>
+            </div>
+            {pickerOpen && <PopularServicesPicker existing={subscriptions} onAdd={addFromPopular} />}
+            <SubscriptionManager
+              categoryFilter={categoryFilter}
+              categoryOptions={categoryOptions}
+              deleteSubscription={deleteSubscription}
+              draft={subscriptionDraft}
+              editingDraft={editingDraft}
+              editingId={editingId}
+              onAdd={addSubscription}
+              onCancelEdit={() => setEditingId(null)}
+              onDraftChange={setSubscriptionDraft}
+              onEditDraftChange={setEditingDraft}
+              onSaveEdit={saveEditing}
+              onStartEdit={startEditing}
+              searchQuery={searchQuery}
+              setCategoryFilter={setCategoryFilter}
+              setSearchQuery={setSearchQuery}
+              setSortKey={setSortKey}
+              sortKey={sortKey}
+              subscriptions={visibleSubscriptions}
+            />
+          </div>
         )}
 
         {activeView === "trials" && (
@@ -581,7 +1006,13 @@ export function BurnRateApp() {
 
         {activeView === "share" && (
           <ShareAndData
+            exportBurnFile={exportBurnFile}
             exportCsv={exportCsv}
+            exportIcs={exportIcs}
+            generateShareLink={generateShareLink}
+            generateSyncLink={generateSyncLink}
+            importBurnFile={importBurnFile}
+            importBurnInputRef={importBurnInputRef}
             importCsv={importCsv}
             importInputRef={importInputRef}
             isImageBusy={isImageBusy}
@@ -595,15 +1026,28 @@ export function BurnRateApp() {
         )}
       </main>
 
+      <SyncModal
+        open={syncModalOpen}
+        summary={syncSummary}
+        error={syncError}
+        onDecision={handleSyncDecision}
+      />
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={paletteCommands} />
+
       <div
-        className={clsx(
-          "fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-panel border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm font-bold shadow-2xl transition",
-          toast ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0",
-        )}
+        className="pointer-events-none fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2"
         role="status"
         aria-live="polite"
       >
-        {toast}
+        {toasts.map((entry) => (
+          <div
+            key={entry.id}
+            className="rounded-panel border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-3 text-sm font-bold shadow-2xl"
+          >
+            {entry.message}
+          </div>
+        ))}
       </div>
     </div>
   );

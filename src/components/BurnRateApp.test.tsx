@@ -122,7 +122,7 @@ describe("BurnRateApp flows", () => {
     await user.click(spotifyToggle);
     expect(screen.getByText(/You'd save \$120\.00\/year/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /share/i }));
+    await user.click(screen.getByRole("button", { name: /settings/i }));
     await user.click(screen.getByRole("button", { name: /export csv/i }));
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     expect(anchorClick).toHaveBeenCalled();
@@ -136,7 +136,7 @@ describe("BurnRateApp flows", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const { container } = render(<BurnRateApp />);
 
-    await user.click(screen.getByRole("button", { name: /share/i }));
+    await user.click(screen.getByRole("button", { name: /settings/i }));
     const input = container.querySelector<HTMLInputElement>('input[type="file"]');
     if (!input) {
       throw new Error("Import input not found");

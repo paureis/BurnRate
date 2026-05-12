@@ -1,6 +1,9 @@
-# BurnRate — Codex /goal Prompt
+# BurnRate — Codex /goal Prompt  [COMPLETED — 2026-05-12]
 
-> Copy everything below the line and paste it after typing `/goal` in Codex CLI.
+> **DO NOT USE THIS FILE.** All milestones below were implemented and shipped.
+> The current active goal lives in `docs/goal2.md`. Paste that one after `/goal`.
+>
+> Kept for historical reference only.
 
 ---
 

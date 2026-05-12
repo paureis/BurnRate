@@ -17,11 +17,13 @@ import { EmptyState } from "./EmptyState";
 import { TrialCard } from "./TrialTracker";
 
 export function Dashboard({
+  budgetInsights = [],
   metrics,
   onQuickAdd,
   subscriptions,
   trials,
 }: {
+  budgetInsights?: Array<{ id: string; title: string; detail: string; tone: "good" | "neutral" | "warning" | "danger" }>;
   metrics: ReturnType<typeof calculateBurnMetrics>;
   onQuickAdd: () => void;
   subscriptions: Subscription[];
@@ -101,7 +103,19 @@ export function Dashboard({
           <h2 className="text-xl font-extrabold">Smart insights</h2>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
-          {metrics.insights.slice(0, 3).map((insight) => (
+          {budgetInsights.map((insight) => (
+            <InsightTile
+              key={insight.id}
+              insight={{
+                id: insight.id,
+                kind: "category-share",
+                title: insight.title,
+                detail: insight.detail,
+                tone: insight.tone,
+              }}
+            />
+          ))}
+          {metrics.insights.slice(0, Math.max(0, 3 - budgetInsights.length)).map((insight) => (
             <InsightTile key={insight.id} insight={insight} />
           ))}
         </div>

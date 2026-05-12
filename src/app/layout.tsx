@@ -49,6 +49,12 @@ export const metadata: Metadata = {
     icon: "/icon.svg",
     apple: "/apple-touch-icon.png",
   },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "BurnRate",
+  },
 };
 
 export const viewport: Viewport = {
