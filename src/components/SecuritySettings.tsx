@@ -74,7 +74,8 @@ export function SecuritySettings({
       {!controls.enabled && (
         <>
           <p className="text-xs text-[color:var(--subtle)]">
-            Encrypt your local data with a passphrase. Sync and share links remain cleartext.
+            Lock the app behind a passphrase. This is a screen lock — your subscription data still lives in this browser as plain JSON
+            (visible to extensions, DevTools, and anyone with the device). Sync and share links remain cleartext.
           </p>
           <label className="label">
             Passphrase

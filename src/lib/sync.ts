@@ -56,7 +56,7 @@ export function decodeSyncPayload(input: string): BurnRateData {
   const json = decompressed.slice(0, separatorIndex);
   const checksum = decompressed.slice(separatorIndex + 1);
   if (simpleChecksum(json).toString(36) !== checksum) {
-    throw new SyncDecodeError("Sync payload checksum mismatch (possible tampering)");
+    throw new SyncDecodeError("Sync payload checksum mismatch");
   }
 
   let parsed: unknown;
@@ -225,6 +225,9 @@ function hydrateTrial(value: unknown): Trial {
   return out;
 }
 
+// FNV-1a 32-bit. Detects accidental corruption / truncation in URL-passed payloads.
+// Not cryptographic: a motivated actor can recompute and forge it. Treat sync links
+// as capability tokens, not as authenticated messages.
 function simpleChecksum(input: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i += 1) {

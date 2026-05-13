@@ -63,8 +63,6 @@ import {
   createVaultMeta,
   emptyVaultMeta,
   unlockVault,
-  wrapEncrypted,
-  unwrapEncrypted,
   type VaultMeta,
 } from "@/lib/crypto";
 import { BudgetTracker } from "./BudgetTracker";
@@ -773,10 +771,6 @@ export function BurnRateApp() {
     }
   }
 
-  // Quick keep-alive demo for crypto helpers — silences "imported but unused" hits.
-  void wrapEncrypted;
-  void unwrapEncrypted;
-
   function deleteSubscription(id: string) {
     const target = subscriptions.find((subscription) => subscription.id === id);
     setSubscriptions((current) => current.filter((subscription) => subscription.id !== id));
@@ -1072,7 +1066,19 @@ export function BurnRateApp() {
     }
   }
 
-  if (isLocked && hasHydrated) {
+  // Before first client paint, render a neutral shell so subscription data never
+  // flashes when the vault is enabled. After hydration, branch to the lock screen
+  // when locked, otherwise fall through to the main app.
+  if (!hasHydrated) {
+    return (
+      <div
+        className={clsx("app-shell", theme === "light" ? "theme-light" : "theme-dark")}
+        aria-busy="true"
+      />
+    );
+  }
+
+  if (isLocked) {
     return (
       <LockScreen
         attemptsRemaining={Math.max(0, 5 - failedUnlockAttempts)}

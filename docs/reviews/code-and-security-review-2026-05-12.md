@@ -1,5 +1,27 @@
 # BurnRate — code review, security review, and adversarial pass — 12th of May 2026
 
+> ## Disposition (addressed 2026-05-12, post-review)
+>
+> Verification after fixes: `npm test` → 266/266 passing; `npm run typecheck` → clean.
+>
+> | # | Severity | Finding | Disposition | Where |
+> |---|---|---|---|---|
+> | H1 | High | "Passphrase lock" does not encrypt stored data | **Resolved (honesty path).** UI copy in `SecuritySettings.tsx` now explicitly states this is a screen lock, not at-rest encryption, and that data still lives as plain JSON in localStorage visible to extensions/DevTools. Unused `wrapEncrypted` / `unwrapEncrypted` imports and the `void` lint-suppression hack removed from `BurnRateApp.tsx`. The crypto helpers stay in `src/lib/crypto.ts` (still tested) for future at-rest encryption work; implementing real at-rest encryption is a larger refactor tracked separately. | `src/components/SecuritySettings.tsx`, `src/components/BurnRateApp.tsx` |
+> | H2 | High | Flash of unlocked UI before `LockScreen` | **Resolved.** Pre-hydration now renders a neutral `app-shell` skeleton (`aria-busy="true"`); after hydration we branch directly to `LockScreen` when `isLocked` (no `&& hasHydrated` gate). Subscription data can no longer paint to the DOM on the first client frame when the vault is enabled. | `src/components/BurnRateApp.tsx` |
+> | M1 | Medium | Sync checksum messaging implies tamper-resistance | **Resolved (wording + threat-model comment).** Error message changed from `"checksum mismatch (possible tampering)"` to `"checksum mismatch"`. Added a comment above `simpleChecksum` explaining it is FNV-1a, catches accidental corruption only, and that sync URLs are capability tokens not authenticated messages. | `src/lib/sync.ts` |
+> | M2 | Medium | No CSP / security headers | **Resolved.** `next.config.mjs` now serves `Content-Security-Policy`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Permissions-Policy` (camera/mic/geolocation/FLoC disabled), and `Strict-Transport-Security` on all routes. CSP allows `'unsafe-inline'` for scripts and styles (Next.js hydration + Tailwind preflight) and `data:`/`blob:` for `img-src` (html2canvas PNG export). | `next.config.mjs` |
+> | L1 | Low/info | Share + sync URLs are capability secrets | **Already documented.** README "Privacy" and the in-app warnings on link generation already cover this. No code change. |
+> | L2 | Low/info | Sync link in `#hash` visible to same-page JS | **Accepted.** Inherent to the design; no in-product third-party JS today. No code change. |
+> | L3 | Low/info | Service worker SWR for HTML can serve stale shell | **Accepted.** Versioned cache (`CACHE_VERSION`) already triggers eviction on deploy; trade-off is intentional for offline-first behavior. No code change. |
+> | L4 | Low/info | `html2canvas` is a large dep — keep updated | **Accepted, ongoing.** Dependency hygiene is handled at the package level; no in-scope action. |
+> | Q1 | Quality (non-blocking) | `BurnRateApp.tsx` too large | **Dismissed for this pass.** Already called out in `docs/architecture.md` under v3.1 follow-ups (`useBurnRateState` extraction is queued). Out of scope for this review-response. |
+> | Q2 | Quality (non-blocking) | `useLocalStorage` silently fails on quota errors | **Dismissed.** The silent-failure behavior is intentional — quota errors on a client-only app are unrecoverable mid-write; a louder UX (toast on every set) would create noise. Worth revisiting if telemetry shows real impact. |
+> | Q3 | Quality (non-blocking) | `mergeSync` dedupes by lowercased name only | **Dismissed.** Name is the only stable user-visible identifier across two browsers that don't share IDs. Two services with the same display name on both ends colliding is the user's intended outcome for `merge`; the `replace` flow is the escape hatch when in doubt. |
+
+---
+
+
+
 **Date:** 2026-05-12  
 **Scope:** Full-project read (Next.js 16, React 19, client-only app).  
 **Verification at time of review:** `npm test` — 266 tests passed; `npm run typecheck` — passed.
