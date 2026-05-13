@@ -1,7 +1,7 @@
 # BurnRate — Codex /goal Prompt  [COMPLETED — 2026-05-12]
 
 > **DO NOT USE THIS FILE.** All milestones below were implemented and shipped.
-> The current active goal lives in `docs/goal2.md`. Paste that one after `/goal`.
+> The current active goal lives in `docs/specs/goal2.md`. Paste that one after `/goal`.
 >
 > Kept for historical reference only.
 

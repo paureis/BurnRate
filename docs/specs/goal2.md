@@ -1,7 +1,7 @@
 # BurnRate v2 — Codex `/goal` Prompt  [COMPLETED — 2026-05-12]
 
 > **DO NOT USE THIS FILE.** All seven features below were implemented, tested, and shipped.
-> See `docs/v2-progress.md` for the per-feature progress log and `docs/architecture.md` for the resulting runtime data flow.
+> See `docs/progress/v2.md` for the per-feature progress log and `docs/architecture.md` for the resulting runtime data flow.
 >
 > Kept for historical reference only.
 
@@ -325,7 +325,7 @@ The current app uses `output: "export"` (static export). To unlock dynamic OG im
   - How to install as a PWA.
   - How sync links and share links differ (sync = full restore, share = read-only public).
   - Privacy statement: data lives in your browser; sync/share links contain your data.
-- Update or replace `docs/goal.md` reference to point to this `goal2.md`.
+- Update or replace `docs/specs/goal.md` reference to point to this `goal2.md`.
 - Add `docs/architecture.md` summarizing the runtime data flow (≤ 1 page).
 
 ---
@@ -363,7 +363,7 @@ Before declaring the milestone complete, run every step below and confirm green.
 
 # Progress Log Requirement
 
-Maintain a running progress log in `docs/v2-progress.md` with one section per feature: "Started", "Decisions", "Tests added", "Verified". Update it after each major commit. This is the artifact a human reviewer will read.
+Maintain a running progress log in `docs/progress/v2.md` with one section per feature: "Started", "Decisions", "Tests added", "Verified". Update it after each major commit. This is the artifact a human reviewer will read.
 
 # Stopping Condition
 

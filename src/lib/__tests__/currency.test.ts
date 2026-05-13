@@ -7,7 +7,7 @@ import {
   formatMoney,
   getCurrencyFractionDigits,
   mergeFxRates,
-} from "./currency";
+} from "../currency";
 
 describe("convertCents", () => {
   it("returns the input unchanged when currencies match", () => {

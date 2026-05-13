@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { bundleRules } from "@/data/bundle-rules";
 import { overlapRules } from "@/data/overlap-rules";
-import { detectBundles, detectOverlaps } from "./recommendations";
-import type { Subscription } from "./burnrate";
+import { detectBundles, detectOverlaps } from "../recommendations";
+import type { Subscription } from "../burnrate";
 
 function sub(overrides: Partial<Subscription>): Subscription {
   return {

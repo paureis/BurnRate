@@ -458,9 +458,9 @@ This third milestone shifts BurnRate from *viewer of right now* to *coach across
   - The encryption layer wrapping `localStorage`.
   - The new pure libs (`snapshots.ts`, `idb.ts`, `currency.ts`, `crypto.ts`, `ledger.ts`, `recommendations.ts`, `charges.ts`, `charge-matcher.ts`).
   - The schema-version bump and migration entry point.
-- Create `docs/v3-progress.md` and maintain it as you go (one section per feature, with Started / Decisions / Tests added / Verified).
+- Create `docs/progress/v3.md` and maintain it as you go (one section per feature, with Started / Decisions / Tests added / Verified).
 - Create `docs/testing.md` (from Feature 6).
-- Mark `docs/goal2.md` historical (already done) and reference `docs/goal3.md` as the active goal.
+- Mark `docs/specs/goal2.md` historical (already done) and reference `docs/specs/goal3.md` as the active goal.
 
 ---
 
@@ -496,4 +496,4 @@ Before declaring the milestone complete, run every step below and confirm green.
 
 # Stopping Condition
 
-**Stop only when every check above is green and the progress log shows every feature `Verified`.** If you hit an obstacle, document it in `docs/v3-progress.md`, attempt a workaround, and only escalate to a human if the workaround would violate a hard constraint above.
+**Stop only when every check above is green and the progress log shows every feature `Verified`.** If you hit an obstacle, document it in `docs/progress/v3.md`, attempt a workaround, and only escalate to a human if the workaround would violate a hard constraint above.

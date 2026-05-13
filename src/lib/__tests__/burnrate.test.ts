@@ -13,7 +13,7 @@ import {
   type BurnRateData,
   type Subscription,
   type Trial,
-} from "./burnrate";
+} from "../burnrate";
 
 const today = new Date("2026-05-11T12:00:00-04:00");
 

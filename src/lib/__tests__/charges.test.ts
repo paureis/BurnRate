@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { collapseDuplicates, parseChargesText } from "./charges";
+import { collapseDuplicates, parseChargesText } from "../charges";
 
 describe("parseChargesText", () => {
   it("returns nothing for empty input", () => {

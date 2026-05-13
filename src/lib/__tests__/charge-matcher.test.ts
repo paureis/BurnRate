@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { popularServices } from "@/data/popular-services";
-import { matchCharges } from "./charge-matcher";
-import type { Subscription } from "./burnrate";
-import type { ParsedCharge } from "./charges";
+import { matchCharges } from "../charge-matcher";
+import type { Subscription } from "../burnrate";
+import type { ParsedCharge } from "../charges";
 
 function charge(vendor: string, amountCents = 1599): ParsedCharge {
   return {

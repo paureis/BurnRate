@@ -80,7 +80,7 @@ BurnRate is a single-user Next.js 16 (App Router) app that stores everything in 
 - **No FX API.** A static rate table snapshotted on 2026-05-01 ships in `src/data/fx-rates.ts`. Users override per-currency from Settings; overrides persist in `burnrate.preferences.v1`.
 - **Encryption boundary.** WebCrypto AES-GCM wraps localStorage values when the vault is enabled. Sync and share links remain cleartext — the receiving device can't decrypt otherwise. Generation flows show explicit warnings.
 - **IDB for time-series only.** Subs/trials/ledger stay in localStorage (small, fast). Snapshots live in IndexedDB because they grow over time and don't need sync-payload inclusion.
-- **One big app component (still).** `BurnRateApp.tsx` orchestrates all state. The v2 follow-up `useBurnRateState` extraction is still queued — see `docs/v3-progress.md`.
+- **One big app component (still).** `BurnRateApp.tsx` orchestrates all state. The v2 follow-up `useBurnRateState` extraction is still queued — see `docs/progress/v3.md`.
 
 ## Testing strategy
 

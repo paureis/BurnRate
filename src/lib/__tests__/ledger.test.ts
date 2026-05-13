@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Subscription } from "./burnrate";
+import type { Subscription } from "../burnrate";
 import {
   applyDueCancellations,
   buildManualLedgerRecord,
@@ -10,7 +10,7 @@ import {
   normalizeLedger,
   totalSavedMonthlyCents,
   totalSavedYearlyCents,
-} from "./ledger";
+} from "../ledger";
 
 function sub(overrides: Partial<Subscription> = {}): Subscription {
   return {

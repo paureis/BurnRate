@@ -5,7 +5,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Subscription } from "@/lib/burnrate";
-import { PopularServicesPicker, type PopularServiceAdd } from "./PopularServicesPicker";
+import { PopularServicesPicker, type PopularServiceAdd } from "../PopularServicesPicker";
 
 function makeSubscription(name: string): Subscription {
   return {

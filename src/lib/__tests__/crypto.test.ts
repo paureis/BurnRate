@@ -12,7 +12,7 @@ import {
   unwrapEncrypted,
   wrapEncrypted,
   VERIFIER_PLAINTEXT,
-} from "./crypto";
+} from "../crypto";
 
 describe("base64url helpers", () => {
   it("round-trips arbitrary bytes", () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { Subscription, Trial } from "./burnrate";
-import { buildFxContext } from "./currency";
+import type { Subscription, Trial } from "../burnrate";
+import { buildFxContext } from "../currency";
 import {
   buildForecastPoints,
   buildSnapshot,
@@ -9,7 +9,7 @@ import {
   currentMonthKey,
   pruneSnapshots,
   type MonthlySnapshot,
-} from "./snapshots";
+} from "../snapshots";
 
 function sub(overrides: Partial<Subscription> = {}): Subscription {
   return {

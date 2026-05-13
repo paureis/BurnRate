@@ -19,7 +19,7 @@ import {
   type BurnRateData,
   type Subscription,
   type Trial,
-} from "./burnrate";
+} from "../burnrate";
 
 function makeSubscription(overrides: Partial<Subscription> = {}): Subscription {
   return {
