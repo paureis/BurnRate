@@ -338,6 +338,8 @@ export function BurnRateApp() {
 
   useEffect(() => {
     document.documentElement.style.colorScheme = theme;
+    document.documentElement.classList.toggle("theme-light", theme === "light");
+    document.documentElement.classList.toggle("theme-dark", theme === "dark");
   }, [theme]);
 
   useEffect(() => {

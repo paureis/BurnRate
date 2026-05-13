@@ -64,20 +64,20 @@ button:disabled {
 }
 
 .theme-light {
-  --background: #f5efe5;
-  --background-grid: rgba(15, 17, 21, 0.055);
-  --panel: #fffaf0;
-  --panel-strong: #f1e4d1;
-  --panel-soft: #f8eddc;
-  --text: #16130f;
-  --muted: #5b6470;
-  --subtle: #7a6f64;
-  --line: rgba(20, 18, 16, 0.16);
-  --accent: #d94123;
-  --accent-2: #bf6d00;
-  --accent-3: #087f5b;
-  --danger: #c9184a;
-  --shadow: rgba(77, 44, 10, 0.18);
+  --background: #e8e6df;
+  --background-grid: rgba(15, 20, 30, 0.05);
+  --panel: #f4f2eb;
+  --panel-strong: #d9d6cd;
+  --panel-soft: #edeae2;
+  --text: #13181f;
+  --muted: #4d5560;
+  --subtle: #6b7280;
+  --line: rgba(15, 20, 30, 0.16);
+  --accent: #b8431f;
+  --accent-2: #214c7a;
+  --accent-3: #0a6e55;
+  --danger: #a01838;
+  --shadow: rgba(20, 30, 50, 0.12);
 }
 
 .app-shell {
