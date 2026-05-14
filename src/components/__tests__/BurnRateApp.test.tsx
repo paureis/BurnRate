@@ -91,8 +91,12 @@ describe("BurnRateApp flows", () => {
 
     await user.click(screen.getByRole("button", { name: /trials/i }));
     await user.type(screen.getByLabelText(/service name/i), "Figma");
-    fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: "2026-05-01" } });
-    fireEvent.change(screen.getByLabelText(/end date/i), { target: { value: "2026-05-13" } });
+    const today = new Date();
+    const start = today.toISOString().slice(0, 10);
+    const endDate = new Date(today.getTime() + 12 * 24 * 60 * 60 * 1000);
+    const end = endDate.toISOString().slice(0, 10);
+    fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: start } });
+    fireEvent.change(screen.getByLabelText(/end date/i), { target: { value: end } });
     await user.type(screen.getByLabelText(/cost after trial/i), "15");
     await user.click(screen.getByRole("button", { name: /add trial/i }));
 
@@ -137,9 +141,9 @@ describe("BurnRateApp flows", () => {
     const { container } = render(<BurnRateApp />);
 
     await user.click(screen.getByRole("button", { name: /settings/i }));
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    const input = container.querySelector<HTMLInputElement>('input[accept*="csv"]');
     if (!input) {
-      throw new Error("Import input not found");
+      throw new Error("CSV import input not found");
     }
 
     const csv = [
@@ -173,7 +177,7 @@ async function addSubscription(
   }
 
   await user.type(within(addPanel).getByLabelText(/service name/i), values.name);
-  await user.type(within(addPanel).getByLabelText(/cost/i), values.cost);
+  await user.type(within(addPanel).getByLabelText(/^cost$/i), values.cost);
   await user.clear(within(addPanel).getByLabelText(/category/i));
   await user.type(within(addPanel).getByLabelText(/category/i), values.category);
   fireEvent.change(within(addPanel).getByLabelText(/next billing/i), {

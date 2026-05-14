@@ -27,6 +27,36 @@ export const defaultCategoryColors: Record<string, string> = {
 export type BillingCycle = (typeof billingCycles)[number];
 export type Theme = "dark" | "light";
 
+// v5: monthly usage entry. Lives on Subscription.usageLog, keyed by "YYYY-MM".
+export interface UsageEntry {
+  used: boolean;
+  sessionCount?: number;
+  note?: string;
+  recordedAt: string; // ISO timestamp
+}
+
+// v5: planned price change queued on a subscription. Applied on boot when due.
+export interface PlannedPriceChange {
+  id: string;
+  effectiveDate: string;  // ISO YYYY-MM-DD
+  newCostCents: number;    // in the sub's native currency
+  note?: string;
+  addedAt: string;         // ISO timestamp
+}
+
+// v5: retention / discount metadata. The sub.costCents is what the user actually
+// pays today; activeDiscount.originalCostCents is the strike-through reference.
+export type DiscountSource = "retention" | "promo" | "student" | "annual-prepay" | "household" | "other";
+
+export interface ActiveDiscount {
+  id: string;
+  originalCostCents: number;
+  negotiatedOn: string;     // ISO YYYY-MM-DD
+  expiresOn?: string;        // ISO YYYY-MM-DD
+  note?: string;
+  source: DiscountSource;
+}
+
 export interface Subscription {
   id: string;
   name: string;
@@ -43,6 +73,12 @@ export interface Subscription {
   // ISO date (YYYY-MM-DD). When set, the sub renders as "Cancelling on X" and
   // applyDueCancellations() will move it to the ledger once the date passes.
   cancellingOn?: string | null;
+  // v4: lowercase-kebab tag chips, deduped. Capped at 10 per record by tag helpers.
+  tags?: string[];
+  // v5 additions:
+  usageLog?: Record<string, UsageEntry>;
+  priceChanges?: PlannedPriceChange[];
+  activeDiscount?: ActiveDiscount;
 }
 
 export interface Trial {
@@ -54,6 +90,8 @@ export interface Trial {
   remindMe: boolean;
   createdAt: string;
   currency?: string;
+  // v4: tags shared with Subscription (same normalization rules).
+  tags?: string[];
 }
 
 import type { BudgetGoal } from "./budget";

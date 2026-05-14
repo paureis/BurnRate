@@ -152,8 +152,8 @@ describe("Budget tracker integration", () => {
 
     // Now wipe and re-import
     localStorage.setItem("burnrate.budget.v1", JSON.stringify({ monthlyCapCents: null, annualSavingsTargetCents: null, targetDate: null, baselineYearlyCents: null, createdAt: null }));
-    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
-    if (!input) throw new Error("File input missing");
+    const input = container.querySelector<HTMLInputElement>('input[accept*="csv"]');
+    if (!input) throw new Error("CSV file input missing");
     const file = new File([capturedCsv], "burnrate.csv", { type: "text/csv" });
     fireEvent.change(input, { target: { files: [file] } });
 

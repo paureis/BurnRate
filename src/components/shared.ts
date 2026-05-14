@@ -13,7 +13,7 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
-import { addDaysDateInputValue, todayDateInputValue, type BillingCycle } from "@/lib/burnrate";
+import { addDaysDateInputValue, todayDateInputValue, type BillingCycle, type PlannedPriceChange } from "@/lib/burnrate";
 
 export type View = "dashboard" | "subscriptions" | "trials" | "simulator" | "share";
 export type SortKey = "cost" | "name" | "nextBillingDate" | "category";
@@ -29,6 +29,8 @@ export interface SubscriptionDraft {
   icon: string;
   currency: string;
   cancellingOn: string;
+  tags: string[];
+  priceChanges: PlannedPriceChange[];
 }
 
 export interface TrialDraft {
@@ -49,6 +51,10 @@ export const storageKeys = {
   ledger: "burnrate.ledger.v1",
   vault: "burnrate.vault.v1",
   recommendationsDismissed: "burnrate.recommendations.dismissed.v1",
+  // v4
+  views: "burnrate.views.v1",
+  categories: "burnrate.categories.v1",
+  history: "burnrate.history.v1",
 };
 
 export const iconMap: Record<string, LucideIcon> = {
@@ -92,6 +98,8 @@ export function newSubscriptionDraft(baseCurrency = "USD"): SubscriptionDraft {
     icon: "wallet",
     currency: baseCurrency,
     cancellingOn: "",
+    tags: [],
+    priceChanges: [],
   };
 }
 

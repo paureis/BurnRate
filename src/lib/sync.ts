@@ -7,7 +7,10 @@ import { DEFAULT_BASE_CURRENCY } from "./currency";
 
 const PREFIX_V1 = "BR1.";
 const PREFIX_V2 = "BR2.";
-const CURRENT_PREFIX = PREFIX_V2;
+const PREFIX_V3 = "BR3.";
+const PREFIX_V4 = "BR4.";
+const PREFIX_V5 = "BR5.";
+const CURRENT_PREFIX = PREFIX_V5;
 
 export class SyncDecodeError extends Error {
   constructor(message: string) {
@@ -20,7 +23,7 @@ export interface SyncSummary {
   subscriptionsCount: number;
   trialsCount: number;
   bytes: number;
-  version: "BR1" | "BR2";
+  version: "BR1" | "BR2" | "BR3" | "BR4" | "BR5";
 }
 
 export function encodeSyncPayload(data: BurnRateData): string {
@@ -69,7 +72,16 @@ export function decodeSyncPayload(input: string): BurnRateData {
   return hydrate(parsed, version);
 }
 
-function parsePrefix(input: string): { body: string; version: "BR1" | "BR2" } {
+function parsePrefix(input: string): { body: string; version: "BR1" | "BR2" | "BR3" | "BR4" | "BR5" } {
+  if (input.startsWith(PREFIX_V5)) {
+    return { body: input.slice(PREFIX_V5.length), version: "BR5" };
+  }
+  if (input.startsWith(PREFIX_V4)) {
+    return { body: input.slice(PREFIX_V4.length), version: "BR4" };
+  }
+  if (input.startsWith(PREFIX_V3)) {
+    return { body: input.slice(PREFIX_V3.length), version: "BR3" };
+  }
   if (input.startsWith(PREFIX_V2)) {
     return { body: input.slice(PREFIX_V2.length), version: "BR2" };
   }
@@ -85,11 +97,16 @@ function parsePrefix(input: string): { body: string; version: "BR1" | "BR2" } {
 
 export function summarizeSyncPayload(payload: string): SyncSummary {
   const data = decodeSyncPayload(payload);
+  let version: SyncSummary["version"] = "BR1";
+  if (payload.startsWith(PREFIX_V5)) version = "BR5";
+  else if (payload.startsWith(PREFIX_V4)) version = "BR4";
+  else if (payload.startsWith(PREFIX_V3)) version = "BR3";
+  else if (payload.startsWith(PREFIX_V2)) version = "BR2";
   return {
     subscriptionsCount: data.subscriptions.length,
     trialsCount: data.trials.length,
     bytes: payload.length,
-    version: payload.startsWith(PREFIX_V2) ? "BR2" : "BR1",
+    version,
   };
 }
 
@@ -145,6 +162,7 @@ function normalizeSubscription(subscription: Subscription): Subscription {
   };
   if (subscription.currency) out.currency = subscription.currency;
   if (subscription.cancellingOn) out.cancellingOn = subscription.cancellingOn;
+  if (subscription.tags && subscription.tags.length > 0) out.tags = subscription.tags;
   return out;
 }
 
@@ -159,10 +177,11 @@ function normalizeTrial(trial: Trial): Trial {
     createdAt: trial.createdAt,
   };
   if (trial.currency) out.currency = trial.currency;
+  if (trial.tags && trial.tags.length > 0) out.tags = trial.tags;
   return out;
 }
 
-function hydrate(value: unknown, version: "BR1" | "BR2"): BurnRateData {
+function hydrate(value: unknown, version: "BR1" | "BR2" | "BR3" | "BR4" | "BR5"): BurnRateData {
   if (!value || typeof value !== "object") {
     throw new SyncDecodeError("Sync payload shape is invalid");
   }
@@ -178,7 +197,7 @@ function hydrate(value: unknown, version: "BR1" | "BR2"): BurnRateData {
   if (candidate.budget && typeof candidate.budget === "object") {
     out.budget = candidate.budget;
   }
-  if (version === "BR2") {
+  if (version === "BR2" || version === "BR3" || version === "BR4" || version === "BR5") {
     if (candidate.preferences) out.preferences = normalizePreferences(candidate.preferences);
     if (Array.isArray(candidate.ledger)) out.ledger = normalizeLedger(candidate.ledger);
   }
@@ -204,6 +223,7 @@ function hydrateSubscription(value: unknown): Subscription {
   };
   if (record.currency) out.currency = record.currency;
   if (record.cancellingOn) out.cancellingOn = record.cancellingOn;
+  if (Array.isArray(record.tags) && record.tags.length > 0) out.tags = record.tags.filter((t): t is string => typeof t === "string");
   return out;
 }
 
@@ -222,6 +242,7 @@ function hydrateTrial(value: unknown): Trial {
     createdAt: record.createdAt ?? new Date().toISOString(),
   };
   if (record.currency) out.currency = record.currency;
+  if (Array.isArray(record.tags) && record.tags.length > 0) out.tags = record.tags.filter((t): t is string => typeof t === "string");
   return out;
 }
 
