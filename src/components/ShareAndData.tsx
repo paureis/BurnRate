@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowDownToLine, CalendarDays, Download, FileDown, Flame, Link2, Trash2, Upload } from "lucide-react";
+import { ArrowDownToLine, CalendarClock, CalendarDays, Download, FileDown, Flame, Link2, Trash2, Upload } from "lucide-react";
 import { calculateBurnMetrics, formatCents, type Subscription, type Trial } from "@/lib/burnrate";
 
 export function ShareAndData({
   exportBurnFile,
   exportCsv,
   exportIcs,
+  generateLiveCalendarUrl,
   generateShareLink,
   generateSyncLink,
   importBurnFile,
@@ -24,6 +25,7 @@ export function ShareAndData({
   exportBurnFile: () => void;
   exportCsv: () => void;
   exportIcs: () => void;
+  generateLiveCalendarUrl?: () => void;
   generateShareLink: () => void;
   generateSyncLink: () => void;
   importBurnFile: (file: File | null) => void;
@@ -109,6 +111,16 @@ export function ShareAndData({
             <Link2 aria-hidden="true" size={17} />
             Generate sync link
           </button>
+          {generateLiveCalendarUrl && (
+            <button
+              className="button-secondary justify-start"
+              type="button"
+              onClick={generateLiveCalendarUrl}
+            >
+              <CalendarClock aria-hidden="true" size={17} />
+              Subscribe to live calendar
+            </button>
+          )}
         </div>
 
         <h3 className="mt-6 text-sm font-extrabold uppercase tracking-[0.18em] text-[color:var(--accent-2)]">Share</h3>

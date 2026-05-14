@@ -45,6 +45,43 @@ import {
   buildFxContext,
   DEFAULT_BASE_CURRENCY,
 } from "@/lib/currency";
+import { collectAllTags } from "@/lib/tags";
+import { applyView, normalizeViews, type SavedView } from "@/lib/views";
+import { SavedViewsPills } from "./SavedViewsPills";
+import { applyBulkDelete, applyBulkPatch, type BulkPatch } from "@/lib/bulk";
+import { applyDuePriceChanges } from "@/lib/price-changes";
+import { BulkActionBar } from "./BulkActionBar";
+import { buildBuiltInCategories, loadCategories, type CategoryDef } from "@/lib/categories";
+import type { ProfileSettingsState } from "@/lib/profile";
+import { ProfileSettings } from "./ProfileSettings";
+import { CategorySettings } from "./CategorySettings";
+import { DashboardLayoutEditor } from "./DashboardLayoutEditor";
+import type { DashboardLayoutEntry } from "@/lib/dashboard-layout";
+import { PeerSyncFlow } from "./PeerSyncFlow";
+import { GoalsPanel } from "./GoalsPanel";
+import type { Goal } from "@/lib/goals";
+import { ProfilesPanel } from "./ProfilesPanel";
+import { PerProfileBurn } from "./PerProfileBurn";
+import { normalizeProfiles, type Profile } from "@/lib/profiles";
+import { DecoySetup } from "./DecoySetup";
+import type { VaultMetaWithDecoy } from "@/lib/decoy";
+import { VaultManager } from "./VaultManager";
+import { normalizeRegistry, type VaultRegistry } from "@/lib/vault-registry";
+import { HistoryDrawer } from "./HistoryDrawer";
+import { append, normalizeHistory, dropEntry, type HistoryEntry, type HistoryOp } from "@/lib/history";
+import { UsageInsights } from "./UsageInsights";
+import { RetentionLog } from "./RetentionLog";
+import { ChargeCalendarPanel } from "./ChargeCalendarPanel";
+import { NotificationSettings, defaultNotifySettings } from "./NotificationSettings";
+import type { NotifySettings } from "@/lib/notify";
+import { CancellationCoach } from "./CancellationCoach";
+import {
+  buildAttempt,
+  type CancellationAttempt,
+  type CancellationOutcome,
+} from "@/lib/cancellation-attempts";
+import { buildManualLedgerRecord as buildLedgerEntry } from "@/lib/ledger";
+void buildAttempt; void buildLedgerEntry;
 import {
   defaultPreferences,
   normalizePreferences,
@@ -122,6 +159,107 @@ export function BurnRateApp() {
     storageKeys.recommendationsDismissed,
     [],
   );
+  const [storedViews, setStoredViews] = useLocalStorage<SavedView[]>(storageKeys.views, []);
+  const savedViews = useMemo(() => normalizeViews(storedViews), [storedViews]);
+  const [storedCategories, setStoredCategories] = useLocalStorage<CategoryDef[]>(storageKeys.categories, []);
+  const categories = useMemo(() => loadCategories(storedCategories), [storedCategories]);
+  const [storedLayout, setStoredLayout] = useLocalStorage<DashboardLayoutEntry[] | undefined>(
+    "burnrate.dashboard-layout.v1",
+    undefined,
+  );
+  const [storedGoals, setStoredGoals] = useLocalStorage<Goal[]>("burnrate.goals.v2", []);
+  const [storedProfiles, setStoredProfiles] = useLocalStorage<Profile[] | undefined>(
+    "burnrate.profiles.v1",
+    undefined,
+  );
+  const profiles = useMemo(() => normalizeProfiles(storedProfiles), [storedProfiles]);
+  const [storedVaultRegistry, setStoredVaultRegistry] = useLocalStorage<VaultRegistry | undefined>(
+    "burnrate.vault-registry.v1",
+    undefined,
+  );
+  const vaultRegistry = useMemo(() => normalizeRegistry(storedVaultRegistry), [storedVaultRegistry]);
+  const [storedHistory, setStoredHistory] = useLocalStorage<HistoryEntry[]>(storageKeys.history, []);
+  const historyEntries = useMemo(() => normalizeHistory(storedHistory), [storedHistory]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  function recordHistory(op: HistoryOp, summary: string, before: unknown, after: unknown, affectedRecordIds?: string[]) {
+    setStoredHistory((current) =>
+      append(current, { op, summary, before, after, ...(affectedRecordIds ? { affectedRecordIds } : {}) }),
+    );
+  }
+
+  function undoFromHistory(entry: HistoryEntry) {
+    switch (entry.op) {
+      case "addSubscription": {
+        const after = entry.after as { id?: string };
+        if (after?.id) setSubscriptions((current) => current.filter((sub) => sub.id !== after.id));
+        break;
+      }
+      case "deleteSubscription": {
+        const before = entry.before as { id?: string } | null;
+        if (before && typeof before === "object") setSubscriptions((current) => [before as never, ...current]);
+        break;
+      }
+      case "bulkDelete": {
+        const before = entry.before as unknown[];
+        if (Array.isArray(before)) {
+          setSubscriptions((current) => [...(before as never[]), ...current]);
+        }
+        break;
+      }
+      case "bulkUpdate": {
+        const before = entry.before as unknown[];
+        if (Array.isArray(before)) {
+          setSubscriptions((current) => {
+            const beforeIds = new Set((before as Array<{ id: string }>).map((s) => s.id));
+            return current.map((sub) => {
+              if (!beforeIds.has(sub.id)) return sub;
+              const original = (before as Array<{ id: string }>).find((s) => s.id === sub.id);
+              return (original as never) ?? sub;
+            });
+          });
+        }
+        break;
+      }
+      default:
+        showToast("This entry can't be undone automatically.");
+        return;
+    }
+    setStoredHistory((current) => dropEntry(current, entry.id));
+    showToast("Undone.");
+  }
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const lastSelectedRef = useRef<string | null>(null);
+  const [notifySettings, setNotifySettings] = useLocalStorage<NotifySettings>(
+    "burnrate.notify.v1",
+    defaultNotifySettings,
+  );
+  const [cancellationAttempts, setCancellationAttempts] = useLocalStorage<CancellationAttempt[]>(
+    "burnrate.cancellation-attempts.v1",
+    [],
+  );
+  const [coachSubId, setCoachSubId] = useState<string | null>(null);
+  const coachSub = useMemo(
+    () => (coachSubId ? subscriptions.find((sub) => sub.id === coachSubId) ?? null : null),
+    [coachSubId, subscriptions],
+  );
+
+  function openCancellationCoach(subscriptionId: string) {
+    setCoachSubId(subscriptionId);
+  }
+
+  function handleCoachComplete(attempt: CancellationAttempt, outcome: CancellationOutcome) {
+    setCancellationAttempts((current) => [attempt, ...current]);
+    if (outcome === "cancelled") {
+      const target = subscriptions.find((sub) => sub.id === attempt.subscriptionId);
+      if (target) {
+        setCancellingOn(target.id, todayDateInputValue(new Date(Date.now() + 24 * 60 * 60 * 1000)));
+      }
+    }
+    setCoachSubId(null);
+    showToast(`Logged "${attempt.outcome}" attempt for ${attempt.serviceName}.`);
+  }
   const [snapshots, setSnapshots] = useState<MonthlySnapshot[]>([]);
   const [vaultMeta, setVaultMeta] = useLocalStorage<VaultMeta>(storageKeys.vault, emptyVaultMeta);
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
@@ -289,17 +427,19 @@ export function BurnRateApp() {
       items.push({
         id: `edit-${subscription.id}`,
         label: `Edit ${subscription.name}`,
-        keywords: subscription.category,
+        keywords: `${subscription.category} ${(subscription.tags ?? []).join(" ")}`,
         action: () => {
           setActiveView("subscriptions");
           startEditing(subscription);
         },
+        meta: { sub: subscription },
       });
       items.push({
         id: `delete-${subscription.id}`,
         label: `Delete ${subscription.name}`,
-        keywords: subscription.category,
+        keywords: `${subscription.category} ${(subscription.tags ?? []).join(" ")}`,
         action: () => deleteSubscription(subscription.id),
+        meta: { sub: subscription },
       });
     }
 
@@ -311,7 +451,13 @@ export function BurnRateApp() {
     subscriptions.forEach((subscription) => values.add(subscription.category));
     return [...values].sort((a, b) => a.localeCompare(b));
   }, [subscriptions]);
+  const knownTags = useMemo(() => collectAllTags(subscriptions, trials), [subscriptions, trials]);
   const visibleSubscriptions = useMemo(() => {
+    // When a saved view is active, it provides the filter + sort.
+    const activeView = activeViewId ? savedViews.find((v) => v.id === activeViewId) : null;
+    if (activeView) {
+      return applyView(subscriptions, activeView, fxContext);
+    }
     const normalizedSearch = searchQuery.trim().toLowerCase();
     const filtered = subscriptions.filter((subscription) => {
       const matchesCategory = categoryFilter === "all" || subscription.category === categoryFilter;
@@ -334,7 +480,94 @@ export function BurnRateApp() {
           return a.nextBillingDate.localeCompare(b.nextBillingDate);
       }
     });
-  }, [categoryFilter, searchQuery, sortKey, subscriptions]);
+  }, [activeViewId, categoryFilter, fxContext, savedViews, searchQuery, sortKey, subscriptions]);
+
+  function saveCurrentAsView(name: string) {
+    const filter: SavedView["filter"] = {};
+    if (searchQuery.trim()) filter.query = searchQuery.trim();
+    if (categoryFilter !== "all") filter.categories = [categoryFilter];
+    const view: SavedView = {
+      id: `view-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      name,
+      scope: "subscriptions",
+      filter,
+      sort: { by: sortKey, dir: sortKey === "cost" ? "desc" : "asc" },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setStoredViews((current) => [...current, view]);
+    setActiveViewId(view.id);
+    showToast(`Saved view "${name}".`);
+  }
+
+  function deleteSavedView(id: string) {
+    setStoredViews((current) => current.filter((view) => view.id !== id));
+    if (activeViewId === id) setActiveViewId(null);
+    showToast("View deleted.");
+  }
+
+  function toggleSelectedId(id: string, shiftKey: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      // Shift+click range select from the last toggled id.
+      const anchor = lastSelectedRef.current;
+      if (shiftKey && anchor && anchor !== id) {
+        const ids = visibleSubscriptions.map((sub) => sub.id);
+        const a = ids.indexOf(anchor);
+        const b = ids.indexOf(id);
+        if (a >= 0 && b >= 0) {
+          const [start, end] = a < b ? [a, b] : [b, a];
+          for (let i = start; i <= end; i += 1) next.add(ids[i]);
+          lastSelectedRef.current = id;
+          return next;
+        }
+      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      lastSelectedRef.current = id;
+      return next;
+    });
+  }
+
+  function selectAllVisible(selectAll: boolean) {
+    setSelectedIds((current) => {
+      if (!selectAll) {
+        const next = new Set(current);
+        for (const sub of visibleSubscriptions) next.delete(sub.id);
+        return next;
+      }
+      const next = new Set(current);
+      for (const sub of visibleSubscriptions) next.add(sub.id);
+      return next;
+    });
+  }
+
+  function applyBulkPatchToSelection(patch: BulkPatch) {
+    const before = subscriptions.filter((sub) => selectedIds.has(sub.id));
+    const result = applyBulkPatch(subscriptions, selectedIds, patch);
+    if (result.changedCount > 0) {
+      setSubscriptions(result.next);
+      showToast(`Updated ${result.changedCount} subscription${result.changedCount === 1 ? "" : "s"}.`);
+      const after = result.next.filter((sub) => selectedIds.has(sub.id));
+      recordHistory("bulkUpdate", `Updated ${result.changedCount} subscriptions.`, before, after, [...selectedIds]);
+    }
+  }
+
+  function applyBulkDeleteToSelection() {
+    const result = applyBulkDelete(subscriptions, selectedIds);
+    if (result.deleted.length > 0) {
+      setSubscriptions(result.next);
+      setSelectedIds(new Set());
+      showToast(`Deleted ${result.deleted.length} subscription${result.deleted.length === 1 ? "" : "s"}.`);
+      recordHistory(
+        "bulkDelete",
+        `Deleted ${result.deleted.length} subscription${result.deleted.length === 1 ? "" : "s"}.`,
+        result.deleted,
+        null,
+        result.deleted.map((sub) => sub.id),
+      );
+    }
+  }
 
   useEffect(() => {
     document.documentElement.style.colorScheme = theme;
@@ -387,6 +620,20 @@ export function BurnRateApp() {
     if (added.length > 0) {
       showToast(`${added.length} subscription${added.length === 1 ? "" : "s"} auto-cancelled. Undo in the ledger.`);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated]);
+
+  // v5: apply any due price changes on boot. Idempotent on the same day.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    const result = applyDuePriceChanges(subscriptions);
+    if (result.applied.length === 0) return;
+    setSubscriptions(result.next);
+    showToast(
+      result.applied.length === 1
+        ? `${result.applied[0].subscriptionId.startsWith("sub-") ? "A subscription" : result.applied[0].subscriptionId} price changed as scheduled.`
+        : `${result.applied.length} subscriptions had scheduled price changes apply today.`,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasHydrated]);
 
@@ -616,11 +863,16 @@ export function BurnRateApp() {
       createdAt: new Date().toISOString(),
       currency: subscriptionDraft.currency || fxContext.baseCurrency,
       ...(subscriptionDraft.cancellingOn ? { cancellingOn: subscriptionDraft.cancellingOn } : {}),
+      ...(subscriptionDraft.tags && subscriptionDraft.tags.length > 0 ? { tags: subscriptionDraft.tags } : {}),
+      ...(subscriptionDraft.priceChanges && subscriptionDraft.priceChanges.length > 0
+        ? { priceChanges: subscriptionDraft.priceChanges }
+        : {}),
     };
 
     setSubscriptions((current) => [subscription, ...current]);
     setSubscriptionDraft(newSubscriptionDraft(fxContext.baseCurrency));
     showToast(`${subscription.name} added.`);
+    recordHistory("addSubscription", `Added ${subscription.name}.`, null, subscription, [subscription.id]);
   }
 
   function startEditing(subscription: Subscription) {
@@ -636,6 +888,8 @@ export function BurnRateApp() {
       icon: subscription.icon ?? "wallet",
       currency: subscription.currency ?? fxContext.baseCurrency,
       cancellingOn: subscription.cancellingOn ?? "",
+      tags: subscription.tags ? [...subscription.tags] : [],
+      priceChanges: subscription.priceChanges ? [...subscription.priceChanges] : [],
     });
   }
 
@@ -665,6 +919,8 @@ export function BurnRateApp() {
               icon: editingDraft.icon,
               currency: editingDraft.currency || fxContext.baseCurrency,
               cancellingOn: editingDraft.cancellingOn || undefined,
+              tags: editingDraft.tags.length > 0 ? editingDraft.tags : undefined,
+              priceChanges: editingDraft.priceChanges.length > 0 ? editingDraft.priceChanges : undefined,
             }
           : subscription,
       ),
@@ -777,6 +1033,7 @@ export function BurnRateApp() {
     const target = subscriptions.find((subscription) => subscription.id === id);
     setSubscriptions((current) => current.filter((subscription) => subscription.id !== id));
     showToast(target ? `${target.name} deleted.` : "Subscription deleted.");
+    if (target) recordHistory("deleteSubscription", `Deleted ${target.name}.`, target, null, [target.id]);
   }
 
   function addTrial() {
@@ -870,6 +1127,28 @@ export function BurnRateApp() {
       }
     } catch {
       showToast("Clipboard blocked — save a .burn file instead.");
+    }
+  }
+
+  async function generateLiveCalendarUrl() {
+    const stripped: BurnRateData = {
+      subscriptions: subscriptions.map((subscription) => ({ ...subscription, notes: "" })),
+      trials: trials.map((trial) => ({ ...trial })),
+      theme,
+    };
+    const payload = encodeSyncPayload(stripped);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const httpsUrl = `${origin}/s/${payload}/calendar.ics`;
+    const webcalUrl = httpsUrl.replace(/^https?:\/\//, "webcal://");
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(webcalUrl);
+        showToast("Live calendar URL copied — paste into Google/Apple/Outlook Calendar.");
+      } else {
+        showToast("Clipboard unavailable.");
+      }
+    } catch {
+      showToast("Could not copy live calendar URL.");
     }
   }
 
@@ -1116,6 +1395,14 @@ export function BurnRateApp() {
             <button
               type="button"
               className="icon-button"
+              aria-label="Open history"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <span className="text-xs font-extrabold tracking-tight">⟲</span>
+            </button>
+            <button
+              type="button"
+              className="icon-button"
               aria-label="Open command palette"
               onClick={() => setPaletteOpen(true)}
             >
@@ -1211,6 +1498,27 @@ export function BurnRateApp() {
               subscriptions={subscriptions}
             />
             <TrendsPanel fx={fxContext} monthlyBurnCents={metrics.monthlyBurnCents} snapshots={snapshots} />
+            <ChargeCalendarPanel subscriptions={subscriptions} fx={fxContext} now={now} />
+            <GoalsPanel
+              goals={storedGoals}
+              state={{
+                subscriptions,
+                snapshots,
+                monthlyBurnCents: metrics.monthlyBurnCents,
+                yearlyBurnCents: metrics.yearlyBurnCents,
+              }}
+              fx={fxContext}
+              onChange={setStoredGoals}
+              now={now}
+            />
+            <UsageInsights
+              subscriptions={subscriptions}
+              fx={fxContext}
+              now={now}
+              onCancelCoach={openCancellationCoach}
+            />
+            <RetentionLog subscriptions={subscriptions} fx={fxContext} now={now} />
+            <PerProfileBurn profiles={profiles} subscriptions={subscriptions} fx={fxContext} />
             <SavingsLedger fx={fxContext} onDelete={deleteLedgerRow} onUndo={undoLedgerRow} records={ledger} />
             <Dashboard
               budgetInsights={buildBudgetInsights(metrics.monthlyBurnCents, metrics.yearlyBurnCents, budget)}
@@ -1236,6 +1544,14 @@ export function BurnRateApp() {
               </button>
             </div>
             {pickerOpen && <PopularServicesPicker existing={subscriptions} onAdd={addFromPopular} />}
+            <SavedViewsPills
+              views={savedViews}
+              activeViewId={activeViewId}
+              onSelect={setActiveViewId}
+              onClear={() => setActiveViewId(null)}
+              onSave={saveCurrentAsView}
+              onDelete={deleteSavedView}
+            />
             <SubscriptionManager
               categoryFilter={categoryFilter}
               categoryOptions={categoryOptions}
@@ -1244,6 +1560,7 @@ export function BurnRateApp() {
               editingDraft={editingDraft}
               editingId={editingId}
               fx={fxContext}
+              knownTags={knownTags}
               onAdd={addSubscription}
               onCancelEdit={() => setEditingId(null)}
               onCancelSubscription={setCancellingOn}
@@ -1253,11 +1570,21 @@ export function BurnRateApp() {
               onSaveEdit={saveEditing}
               onStartEdit={startEditing}
               searchQuery={searchQuery}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelectedId}
+              onSelectAll={selectAllVisible}
               setCategoryFilter={setCategoryFilter}
               setSearchQuery={setSearchQuery}
               setSortKey={setSortKey}
               sortKey={sortKey}
               subscriptions={visibleSubscriptions}
+            />
+            <BulkActionBar
+              selectedIds={selectedIds}
+              subscriptions={subscriptions}
+              onApplyPatch={applyBulkPatchToSelection}
+              onDelete={applyBulkDeleteToSelection}
+              onClear={() => setSelectedIds(new Set())}
             />
           </div>
         )}
@@ -1306,6 +1633,82 @@ export function BurnRateApp() {
                 />
               </section>
             </div>
+            <ProfileSettings
+              state={{
+                theme,
+                preferences,
+                views: savedViews,
+                categories: buildBuiltInCategories(),
+              }}
+              appVersion="4.0.0"
+              onApply={(next: ProfileSettingsState) => {
+                if (next.theme !== theme) setTheme(next.theme);
+                updatePreferences(next.preferences);
+                setStoredViews(next.views.filter((view) => !["all-subs", "yearly-only", "cancelling-soon"].includes(view.id)));
+                showToast("Profile applied.");
+              }}
+            />
+            <CategorySettings
+              stored={storedCategories}
+              subscriptions={subscriptions}
+              trials={trials}
+              onChange={setStoredCategories}
+            />
+            <ProfilesPanel
+              profiles={profiles}
+              subscriptions={subscriptions}
+              onProfilesChange={setStoredProfiles}
+              onSubsChange={setSubscriptions}
+            />
+            <DecoySetup
+              vaultMeta={vaultMeta as VaultMetaWithDecoy}
+              onChange={(next) => setVaultMeta(next)}
+            />
+            <VaultManager registry={vaultRegistry} onChange={setStoredVaultRegistry} />
+            <DashboardLayoutEditor layout={storedLayout} onChange={setStoredLayout} />
+            <PeerSyncFlow
+              buildPayload={() =>
+                encodeSyncPayload({
+                  subscriptions,
+                  trials,
+                  theme,
+                })
+              }
+              onPayloadReceived={(payload) => {
+                try {
+                  setPendingSyncPayload(payload);
+                  setSyncSummary(summarizeSyncPayload(payload));
+                  setSyncError(null);
+                  setSyncModalOpen(true);
+                } catch (error) {
+                  const message = error instanceof SyncDecodeError ? error.message : "Could not read payload.";
+                  setSyncError(message);
+                  setSyncSummary(null);
+                  setSyncModalOpen(true);
+                }
+              }}
+            />
+            <NotificationSettings
+              settings={notifySettings}
+              onChange={setNotifySettings}
+              supportsPeriodicSync={
+                typeof window !== "undefined" &&
+                typeof ServiceWorkerRegistration !== "undefined" &&
+                "periodicSync" in ServiceWorkerRegistration.prototype
+              }
+              onTest={() => {
+                if (typeof Notification === "undefined") return;
+                if (Notification.permission === "granted") {
+                  try {
+                    new Notification("BurnRate test notification", { body: "Notifications are working." });
+                  } catch {
+                    showToast("Test notification blocked by browser.");
+                  }
+                } else {
+                  showToast("Grant notification permission first.");
+                }
+              }}
+            />
             <ChargesImporter
               baseCurrency={fxContext.baseCurrency}
               onAdd={addImportedSubscription}
@@ -1315,6 +1718,7 @@ export function BurnRateApp() {
               exportBurnFile={exportBurnFile}
               exportCsv={exportCsv}
               exportIcs={exportIcs}
+              generateLiveCalendarUrl={generateLiveCalendarUrl}
               generateShareLink={generateShareLink}
               generateSyncLink={generateSyncLink}
               importBurnFile={importBurnFile}
@@ -1340,7 +1744,27 @@ export function BurnRateApp() {
         onDecision={handleSyncDecision}
       />
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={paletteCommands} />
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={paletteCommands}
+        fx={fxContext}
+      />
+
+      <CancellationCoach
+        open={Boolean(coachSub)}
+        subscription={coachSub}
+        onClose={() => setCoachSubId(null)}
+        onComplete={handleCoachComplete}
+      />
+
+      <HistoryDrawer
+        open={historyOpen}
+        entries={historyEntries}
+        onClose={() => setHistoryOpen(false)}
+        onUndo={undoFromHistory}
+        onClear={() => setStoredHistory([])}
+      />
 
       <div
         className="pointer-events-none fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-2"

@@ -15,6 +15,8 @@ import {
 import { supportedCurrencies } from "@/data/fx-rates";
 import { formatMoney, type FxContext } from "@/lib/currency";
 import { EmptyState } from "./EmptyState";
+import { TagInput } from "./TagInput";
+import { PriceChangeEditor } from "./PriceChangeEditor";
 import { daysUntilDate, iconMap, iconOptions, type SortKey, type SubscriptionDraft } from "./shared";
 
 export function SubscriptionManager({
@@ -25,6 +27,7 @@ export function SubscriptionManager({
   editingDraft,
   editingId,
   fx,
+  knownTags,
   onAdd,
   onCancelEdit,
   onCancelSubscription,
@@ -34,6 +37,9 @@ export function SubscriptionManager({
   onSaveEdit,
   onStartEdit,
   searchQuery,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll,
   setCategoryFilter,
   setSearchQuery,
   setSortKey,
@@ -47,6 +53,7 @@ export function SubscriptionManager({
   editingDraft: SubscriptionDraft;
   editingId: string | null;
   fx: FxContext;
+  knownTags?: string[];
   onAdd: () => void;
   onCancelEdit: () => void;
   onCancelSubscription: (id: string, isoDate: string) => void;
@@ -56,12 +63,17 @@ export function SubscriptionManager({
   onSaveEdit: () => void;
   onStartEdit: (subscription: Subscription) => void;
   searchQuery: string;
+  selectedIds?: ReadonlySet<string>;
+  onToggleSelect?: (id: string, shiftKey: boolean) => void;
+  onSelectAll?: (selectAll: boolean) => void;
   setCategoryFilter: (value: string) => void;
   setSearchQuery: (value: string) => void;
   setSortKey: (value: SortKey) => void;
   sortKey: SortKey;
   subscriptions: Subscription[];
 }) {
+  const allSelected = !!selectedIds && subscriptions.length > 0 && subscriptions.every((sub) => selectedIds.has(sub.id));
+  const someSelected = !!selectedIds && subscriptions.some((sub) => selectedIds.has(sub.id)) && !allSelected;
   return (
     <div className="grid gap-4">
       <section className="panel p-5">
@@ -73,6 +85,7 @@ export function SubscriptionManager({
           buttonLabel="Add subscription"
           draft={draft}
           idPrefix="add-subscription"
+          knownTags={knownTags}
           onChange={onDraftChange}
           onSubmit={onAdd}
         />
@@ -125,6 +138,19 @@ export function SubscriptionManager({
 
         {subscriptions.length > 0 ? (
           <div className="grid gap-3">
+            {onSelectAll && (
+              <label className="flex items-center gap-2 px-1 text-xs font-bold text-[color:var(--muted)]">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(node) => {
+                    if (node) node.indeterminate = someSelected;
+                  }}
+                  onChange={(event) => onSelectAll(event.target.checked)}
+                />
+                Select all ({subscriptions.length})
+              </label>
+            )}
             {subscriptions.map((subscription) =>
               editingId === subscription.id ? (
                 <div key={subscription.id} className="rounded-panel border border-[color:var(--accent-2)] p-4">
@@ -132,6 +158,7 @@ export function SubscriptionManager({
                     buttonLabel="Save changes"
                     draft={editingDraft}
                     idPrefix={`edit-${subscription.id}`}
+                    knownTags={knownTags}
                     onCancel={onCancelEdit}
                     onChange={onEditDraftChange}
                     onSubmit={onSaveEdit}
@@ -146,6 +173,8 @@ export function SubscriptionManager({
                   onStartEdit={onStartEdit}
                   onUndoCancellation={onUndoCancellation}
                   subscription={subscription}
+                  selected={selectedIds?.has(subscription.id)}
+                  onToggleSelect={onToggleSelect}
                 />
               ),
             )}
@@ -166,6 +195,7 @@ export function SubscriptionForm({
   buttonLabel,
   draft,
   idPrefix,
+  knownTags,
   onCancel,
   onChange,
   onSubmit,
@@ -173,6 +203,7 @@ export function SubscriptionForm({
   buttonLabel: string;
   draft: SubscriptionDraft;
   idPrefix: string;
+  knownTags?: string[];
   onCancel?: () => void;
   onChange: (draft: SubscriptionDraft) => void;
   onSubmit: () => void;
@@ -293,6 +324,22 @@ export function SubscriptionForm({
         />
       </label>
 
+      <div className="label">
+        <span>Tags</span>
+        <TagInput
+          tags={draft.tags}
+          knownTags={knownTags}
+          onChange={(tags) => onChange({ ...draft, tags })}
+          placeholder="Press enter or comma to add"
+        />
+      </div>
+
+      <PriceChangeEditor
+        changes={draft.priceChanges}
+        currency={draft.currency}
+        onChange={(priceChanges) => onChange({ ...draft, priceChanges })}
+      />
+
       <div className="flex flex-wrap gap-2">
         <button className="button-primary" type="submit">
           <Save aria-hidden="true" size={17} />
@@ -316,6 +363,8 @@ export function SubscriptionRow({
   onStartEdit,
   onUndoCancellation,
   subscription,
+  selected,
+  onToggleSelect,
 }: {
   deleteSubscription: (id: string) => void;
   fx: FxContext;
@@ -323,6 +372,8 @@ export function SubscriptionRow({
   onStartEdit: (subscription: Subscription) => void;
   onUndoCancellation: (id: string) => void;
   subscription: Subscription;
+  selected?: boolean;
+  onToggleSelect?: (id: string, shiftKey: boolean) => void;
 }) {
   const daysUntil = daysUntilDate(subscription.nextBillingDate);
   const isSoon = daysUntil >= 0 && daysUntil <= 7;
@@ -338,9 +389,20 @@ export function SubscriptionRow({
         "grid gap-4 rounded-panel border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 transition md:grid-cols-[1fr_auto_auto]",
         isSoon && !isCancelling && "border-[color:var(--accent)] shadow-glow",
         isCancelling && "border-[color:var(--accent-2)] opacity-90",
+        selected && "outline outline-2 outline-[color:var(--accent)]",
       )}
     >
       <div className="flex min-w-0 gap-3">
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 shrink-0"
+            checked={selected ?? false}
+            aria-label={`Select ${subscription.name}`}
+            onClick={(event) => onToggleSelect(subscription.id, event.shiftKey)}
+            onChange={() => {/* handled by onClick to capture shiftKey */}}
+          />
+        )}
         <SubscriptionGlyph subscription={subscription} />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -361,6 +423,18 @@ export function SubscriptionRow({
           <p className="text-sm text-[color:var(--muted)]">
             {subscription.category} - renews {subscription.nextBillingDate}
           </p>
+          {subscription.tags && subscription.tags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {subscription.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-[color:var(--panel)] px-2 py-0.5 text-xs font-extrabold text-[color:var(--accent-2)]"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
           {subscription.notes && <p className="mt-2 text-sm text-[color:var(--subtle)]">{subscription.notes}</p>}
         </div>
       </div>

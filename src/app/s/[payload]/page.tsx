@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { calculateBurnMetrics, formatCents } from "@/lib/burnrate";
 import { decodeSyncPayload, SyncDecodeError } from "@/lib/sync";
+import { isEncryptedSharePayload, SHARE_PAYLOAD_PREFIX } from "@/lib/crypto-share";
+import { EncryptedSharePrompt } from "@/components/EncryptedSharePrompt";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,10 @@ export default async function SharePage({
   params: Promise<{ payload: string }>;
 }) {
   const { payload } = await params;
+  if (isEncryptedSharePayload(payload)) {
+    // Hand off to a client component for passphrase entry + browser-side decrypt.
+    return <EncryptedSharePrompt wrappedPayload={payload.slice(SHARE_PAYLOAD_PREFIX.length)} />;
+  }
   try {
     const data = decodeSyncPayload(payload);
     const sanitized = {
