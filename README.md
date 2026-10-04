@@ -1,106 +1,102 @@
 # BurnRate
 
-BurnRate is a free, local-first subscription tracker and spending analyzer. It helps track recurring subscriptions, free trials, upcoming renewals, category spend, cancellation savings, budget goals, and behaviour change — all without a backend, account, database, or API key.
+BurnRate is a free, local-first subscription tracker and spending analyzer. It tracks recurring subscriptions, free trials, upcoming renewals, category spend, cancellation savings, budget goals and household cost splits, with no backend, account, database or API key. It is built with Next.js (App Router), React, TypeScript and Tailwind CSS.
+
+**Live demo: https://burnrate-bay.vercel.app**
+
+<!-- screenshot goes here -->
 
 ## Features
 
-### Dashboard & tracking
-- Monthly and yearly burn-rate dashboard
-- Category breakdown chart and upcoming renewal timeline
-- Inline subscription add/edit/delete workflow
-- Free trial countdowns with urgency indicators and browser notifications
-- Rule-based smart insights
-- What-if cancellation simulator
-- **Trends panel (v3)** — monthly burn history (24-month retention) with a 12-month forecast at your current rate
-- **Smarter alternatives (v3)** — surfaces cheaper bundles (Apple One, Disney Trio, Game Pass Ultimate, etc.) and overlap warnings (multiple video streamers, redundant AI subs)
-- **Pending cancellations (v3)** — schedule a cancel-on date; BurnRate auto-cancels on boot with a 7-day undo
-- **Savings ledger (v3)** — running tally of monthly/annualized savings since your first cancellation
+Everything in this list is wired into the UI today.
 
-### Add things fast
-- Popular Services quick-picker (30+ pre-filled common subscriptions)
-- Command palette via `Cmd+K` / `Ctrl+K` (or the `⌘K` header button)
-- **Paste-charges importer (v3)** — paste a bank statement / email / receipts block; BurnRate parses charges client-side and proposes subscriptions to add
+**Tracking and analysis**
+- Monthly and yearly burn-rate dashboard, category breakdown and renewal timeline
+- Add, edit and delete subscriptions inline; tags, saved views, bulk actions and an undo history
+- Free-trial countdowns with browser notifications
+- Rule-based insights, a what-if cancellation simulator, and cheaper-bundle and overlap suggestions
+- Pending cancellations (schedule a cancel-on date, 7-day undo) and a running savings ledger
+- Monthly burn history (24 months) with a 12-month forecast
+- Usage insights, a charge-calendar heatmap and a retention-discount log
+- Cancellation coach with about 20 service playbooks
+- Household profiles with per-profile cost splits
 
-### Goals
-- Monthly budget cap with thermometer (green / amber / red / over)
-- Annual cancellation savings goal with progress card and target date
+**Goals and currency**
+- Monthly budget cap and annual savings goals
+- 22 currencies using a bundled FX snapshot (no FX API); per-currency overrides in Settings
 
-### Currency (v3)
-- 22 ISO 4217 currencies with bundled FX rates (snapshot date documented in Settings)
-- Per-subscription native currency + base-currency conversion on every total
-- Editable per-currency FX overrides; no external API is called
+**Adding things quickly**
+- Quick-picker of 30 popular services
+- Command palette (`Ctrl+K` / `Cmd+K`)
+- Paste-charges importer: paste a statement or receipts and BurnRate parses the charges in the browser
 
-### Security (v3)
-- Optional passphrase lock (PBKDF2 + AES-GCM 256, WebCrypto)
-- Lock screen on app boot when enabled; configurable auto-lock idle minutes
-- Sync and share links remain cleartext — explicit warnings on generation
-
-### Backup, sync, and share
-- CSV export and import (round-trips subscriptions, trials, budget, ledger, and theme)
-- ICS calendar export — drop renewals and trial-end dates into Google / Apple / Outlook
-- `.burn` file backup
-- **Sync link** — a `#sync=...` URL that round-trips your full state across devices (full restore). v3 emits `BR2.` payloads with preferences + currencies; `BR1.` payloads still decode.
-- **Public share link** — a `/s/<payload>` URL with a dynamic OG image showing your monthly burn (read-only, notes stripped)
+**Backup, sync and sharing**
+- CSV import/export, `.burn` file backup, ICS calendar export
+- Sync link (`#sync=...`) that restores your full state on another device
+- Public read-only share page at `/s/<payload>` with a dynamic preview image; notes are stripped
+- Live calendar feed: a `webcal://` URL served from `/s/<payload>/calendar.ics`
+- Device-to-device sync over WebRTC with manual copy-paste signaling and a QR code for small payloads
 - Shareable summary card with PNG download
 
-### PWA
-- Installable on phone or desktop — works offline once visited
-- App-shell cached by a service worker; install button appears when supported
+**App**
+- Installable PWA that works offline once visited
+- Dark and light themes, skip link, keyboard-driven palette, responsive down to 375px
+- Optional passphrase screen lock (see Security and privacy)
 
-### A11y & UX
-- Skip-to-content link
-- Keyboard-driven command palette
-- Mobile-first responsive layout (375px and up)
-- Dark and light themes
+**Partly built (library code exists, wiring is incomplete)**
+- Encrypted share links: `src/lib/crypto-share.ts` and the receiving passphrase prompt (`src/components/EncryptedSharePrompt.tsx`) exist, but the Share and Data panel has no button that generates an encrypted link yet.
+- Decoy passphrase: the logic is in `src/lib/decoy.ts` and a setup panel exists, but unlocking does not route to a decoy data set yet.
+- Multiple vaults: the registry and manager panel exist, but stored data is not yet namespaced per vault.
+- Notification settings: the panel and scheduler exist, but background (service worker) delivery is not wired.
+- Annual report: a `/report/<year>` route exists, but the main UI does not link to it.
 
-## Tech Stack
+The per-version logs in `docs/progress/` are the history of this work. Some of their "deferred" notes are older than the code (the WebRTC sync UI, for example, is now wired); where they disagree, the source is authoritative.
 
-- Next.js 16 (App Router) on Vercel (no static export)
-- TypeScript (strict)
-- Tailwind CSS
-- Recharts
-- html2canvas (PNG share card)
-- `lz-string` (URL-encoded sync payloads)
-- Browser `localStorage` + service worker cache
+## How it works
 
-## Development
+```mermaid
+flowchart LR
+  Browser[Browser tab] --> Store[localStorage and IndexedDB]
+  Browser --> Lib[Pure modules in src/lib]
+  Browser -->|URL payload| Share[Share page and preview image]
+  Browser -->|URL payload| Cal[Calendar feed]
+  Browser <-->|WebRTC, manual signaling| Peer[Other device]
+```
+
+The app is one large client component, `BurnRateApp`, that holds state in the browser and delegates logic to pure modules in `src/lib`. Server work is stateless: the share page, its preview image and the calendar feed decode everything from the URL payload and store nothing. Sync links encode state with `lz-string`; payloads carry a version prefix (`BR1.` to `BR5.`) and older prefixes still decode. More detail is in [docs/architecture.md](docs/architecture.md).
+
+The QR code encoder (`src/lib/qrcode.ts`, versions 1 to 10) and the WebRTC peer-sync library (`src/lib/peer-sync.ts`) are written from scratch, with no extra dependencies.
+
+## Run it locally
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Then open `http://localhost:3000`.
+Then open http://localhost:3000. To rebuild the PWA icons after editing the source SVG: `node scripts/generate-pwa-icons.mjs`.
 
-To regenerate PWA icons after editing the source SVG:
-
-```bash
-node scripts/generate-pwa-icons.mjs
-```
-
-## Verification
+## Tests
 
 ```bash
-npm test         # vitest, ~190 tests
+npm test            # vitest
 npm run typecheck
 npm run build
+npm run e2e         # Playwright smoke test; needs `npm run dev` running
 ```
 
-## Installing as a PWA
+There are about 530 test cases: 534 `it`/`test` calls across 50 files, counted by grep, of which 2 are in the Playwright smoke spec. They cover the `src/lib` modules, the calendar route and the main components. There is no CI configured. See [docs/testing.md](docs/testing.md).
 
-1. Visit BurnRate in a Chromium-based browser (desktop Chrome / Edge, Android Chrome) or a modern Safari.
-2. Look for the **Install** button in the header (visible when `beforeinstallprompt` fires) or use the browser's "Install app" menu.
-3. Once installed, BurnRate runs in standalone mode and works offline.
+## Security and privacy
 
-## Sync link vs. share link
+- All data is stored in your browser (`localStorage`, plus IndexedDB for monthly snapshots). There is no server-side storage, account, telemetry or paid API.
+- **The passphrase lock is a screen lock, not encryption of stored data.** It derives a key with PBKDF2 (SHA-256, 250,000 iterations) and AES-GCM 256 only to check the passphrase against a stored verifier, and then shows or hides the app. Your subscriptions remain plain JSON in `localStorage`, readable through DevTools, extensions or by anyone with access to the device. The Settings panel says so. The review behind this wording is [docs/reviews/code-and-security-review-2026-05-12.md](docs/reviews/code-and-security-review-2026-05-12.md) (finding H1). Real at-rest encryption is not implemented.
+- Sync links and public share links generated from the UI are not encrypted, and anyone who has the URL can read the data. A sync link keeps its payload in the URL fragment, which browsers do not send to a server. A share link puts it in the URL path, so the server receives it in order to render the read-only page and preview image. Notes are stripped from share links.
+- An AES-GCM encrypted share format (`BR5E.`, opened with a passphrase) is implemented, but the UI does not produce such links yet.
+- The app serves a Content-Security-Policy and other security headers (`next.config.mjs`).
 
-- **Sync link** (`/#sync=...`): full data restore including subscriptions, trials, and budget. Anyone with the URL can see your data — don't share it. The destination prompts you to **Merge**, **Replace**, or **Cancel**.
-- **Public share link** (`/s/<payload>`): read-only summary page. Notes are stripped before encoding. The page is `noindex`. The OG image is generated dynamically at `/s/<payload>/opengraph-image`.
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
-## Privacy
+## License
 
-BurnRate stores all data in your browser's `localStorage` (plus an IndexedDB store for monthly snapshots since v3). There is no server-side storage, account, telemetry, or paid API.
-
-When you generate a sync or share link, the entire payload is encoded into the URL fragment (sync) or path (share). URL fragments are not sent to the server. Path segments for share links ARE sent to the server when the link is opened — the server only uses the payload to render the read-only page and returns the OG image.
-
-**When the passphrase lock is enabled (v3):** local storage values are encrypted with WebCrypto AES-GCM. Sync and share links remain cleartext — the receiving device couldn't decrypt them otherwise. Settings shows the warning prominently when you generate either type of link.
+MIT. See [LICENSE](LICENSE).
