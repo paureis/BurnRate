@@ -4,9 +4,11 @@ BurnRate is a free, local-first subscription tracker and spending analyzer. It t
 
 **Live demo: https://burnrate-bay.vercel.app**
 
-<!-- screenshot goes here -->
+![BurnRate dashboard showing a monthly burn of $208.90, yearly burn, budget goals and a 12-month trend](docs/screenshots/dashboard.png)
 
 ## Features
+
+![BurnRate category breakdown donut chart and upcoming renewals list for 10 sample subscriptions](docs/screenshots/insights.png)
 
 Everything in this list is wired into the UI today.
 
